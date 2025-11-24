@@ -2,26 +2,24 @@ import torch
 
 torch.set_float32_matmul_precision("highest")
 
+import gpytorch
 import math
+from gpytorch.mlls import PredictiveLogLikelihood
 import sys
 
-import gpytorch
-from gpytorch.mlls import PredictiveLogLikelihood
-
 sys.path.append("../")
-import copy
-import time
-
-import numpy as np
+from lolbo.utils.bo_utils.turbo import TurboState, update_state, generate_batch
 from lolbo.utils.bo_utils.censored_likelihood import CensoredGaussianLikelihood
-from lolbo.utils.bo_utils.ppgpr import GPModelDKL
-from lolbo.utils.bo_utils.turbo import TurboState, generate_batch, update_state
-from lolbo.utils.eulbo_utils import get_turbo_lb_ub, update_model_and_generate_candidates_eulbo
+from lolbo.utils.eulbo_utils import update_model_and_generate_candidates_eulbo, get_turbo_lb_ub
 from lolbo.utils.utils import (
+    update_surr_model,
     update_constraint_surr_models,
     update_models_end_to_end_with_constraints,
-    update_surr_model,
 )
+from lolbo.utils.bo_utils.ppgpr import GPModelDKL
+import numpy as np
+import copy
+import time
 
 
 class LOLBOState:
@@ -51,8 +49,7 @@ class LOLBOState:
         vanilla_bo=False,
         eulbo=False,
         use_kg_eulbo=False,
-        thompson_rejection=True,
-        PAS=False,
+        thompson_rejection=False,
     ):
         self.timeout_strategy = timeout_strategy  # strategy used to set new timeouts for db query objectives
         self.gp_stdev_multiplier = (
@@ -89,7 +86,6 @@ class LOLBOState:
             thompson_rejection  # cross join rejection sampling for thompson sampling instead of just VAE decode
         )
         self.thompson_decoded_xs = None
-        self.PAS = PAS
 
         if thompson_rejection and bsz != 1:
             raise ValueError("Thompson rejection sampling only works with batch size of 1")
@@ -200,22 +196,16 @@ class LOLBOState:
                 self.top_k_cs = [valid_train_c]
             if self.censoring is not None:
                 self.top_k_censoring = [valid_censoring]
-        else:  # (haydn) Everything breaks in this case (i.e. cant set timeout, cant update_next because top_k_scores is empty, ...) so I'm taking top 1
-            print("WARNING: No valid points found in initialization data")
-            self.best_score_seen = torch.max(self.train_y).item()
-            self.best_x_seen = self.train_x[torch.argmax(self.train_y.squeeze())]
-
-            # track top k scores found
-            self.top_k_scores, top_k_idxs = torch.topk(self.train_y.squeeze(), 1)
-            self.top_k_scores = self.top_k_scores.tolist()
-            top_k_idxs = top_k_idxs.tolist()
-            self.top_k_xs = [self.train_x[i] for i in top_k_idxs]
-            self.top_k_zs = [self.train_z[i].unsqueeze(-2) for i in top_k_idxs]
-
+        else:
+            self.best_score_seen = None
+            self.best_x_seen = None
+            self.top_k_scores = []
+            self.top_k_xs = []
+            self.top_k_zs = []
             if self.train_c is not None:
                 self.top_k_cs = []
             if self.censoring is not None:
-                self.top_k_censoring = [self.censoring[i].item() for i in top_k_idxs]
+                self.top_k_censoring = []
 
     def initialize_tr_state(self):
         if self.train_c is not None:  # if constrained
@@ -585,7 +575,7 @@ class LOLBOState:
         if self.train_c is not None:
             for c_model in self.c_models:
                 c_model.train()
-                optimize_list.append({"params": c_model.parameters(), "lr": self.learning_rte})
+                optimize_list.append({f"params": c_model.parameters(), "lr": self.learning_rte})
         optimizer1 = torch.optim.Adam(optimize_list, lr=self.learning_rte)
         new_xs = self.train_x[-self.bsz :]
         train_x = new_xs + self.top_k_xs
@@ -688,7 +678,6 @@ class LOLBOState:
                 acqf=self.acq_func,
                 constraint_model_list=constraint_model_list,
                 vanilla_bo=self.vanilla_bo,
-                PAS=self.PAS,
             )
         self.time_generate_candidates = time.time() - start_generate_candidates
 
@@ -821,51 +810,38 @@ class LOLBOState:
 
         train_y_normalized = (self.train_y - self.absolute_min) / self.absolute_range
 
-        def select_noncross(samples):
-            is_cross = [self.objective.has_cross_joins(s) for s in samples]
-            if all(is_cross):
-                return None
-            idx = is_cross.index(False)
-            return idx
-
+        thompson_rejections = 0
         found_noncross = False
-        for _ in range(50):
+        while thompson_rejections < 10 or not found_noncross:
             _start = time.time()
             z_next = generate_batch(
                 state=self.tr_state,
                 model=self.model,
                 X=self.train_z,
                 Y=train_y_normalized,
-                batch_size=20,
+                batch_size=10,
                 acqf=self.acq_func,
                 vanilla_bo=self.vanilla_bo,
-                PAS=self.PAS,
             )
             time_gen_cand += time.time() - _start
 
             _start = time.time()
-            samples = self.objective.vae.sample(z_next)
+            for i in range(10):
+                samples = self.objective.vae.sample(z_next.to(self.objective.vae.device))
+                is_noncross = [not self.objective.has_cross_joins(s) for s in samples]
+
+                if any(is_noncross):
+                    non_cross = samples[is_noncross.index(True)]
+                    self.thompson_decoded_xs = [non_cross]
+                    self.z_next = z_next[is_noncross]
+                    found_noncross = True
+                    break
+
             time_vae_decode += time.time() - _start
 
-            noncross_idx = select_noncross(samples)
-            if noncross_idx is None:
-                continue
-
-            self.thompson_decoded_xs = [samples[noncross_idx]]
-            self.z_next = z_next[noncross_idx].view(1, -1)
-            found_noncross = True
-            break
+            thompson_rejections += 1
 
         if not found_noncross:
-            # Re-encode to get a sample so we dont have identical z's
-            with torch.no_grad():
-                z, _ = self.objective.vae_forward(
-                    [
-                        self.objective.worst_init_x,
-                    ]
-                )
-            z = z.view(1, -1)
-            self.z_next = z
             self.thompson_decoded_xs = [
                 self.objective.worst_init_x,
             ]

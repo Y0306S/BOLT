@@ -1,19 +1,22 @@
 import sys
 
 sys.path.append("../")
-import math
-import os
-
+import traceback
 import fire
-import numpy as np
+from lolbo_scripts.optimize import Optimize
+from lolbo.info_transformer_vae_objective import InfoTransformerVAEObjective
+import math
 import pandas as pd
 import torch
-from lolbo.info_transformer_vae_objective import InfoTransformerVAEObjective
-from lolbo_scripts.optimize import Optimize
+import math
+import wandb
+import os
+import numpy as np
+from lolbo_scripts.create_initialization_data import create_init_data_aliases
 from utils.set_seed import set_seed
 
 torch.set_num_threads(1)
-LLM_GEN_TIMEOUT = 5  # timeout used to generate LLM init data from yimeng
+LLM_GEN_TIMEOUT = 5  # timeout used to generate LLM init data from BOLT
 
 
 class InfoTransformerVAEOptimization(Optimize):
@@ -36,24 +39,6 @@ class InfoTransformerVAEOptimization(Optimize):
         constraint_types: list = [],  # list of strings giving correspoding type for each threshold ("min" or "max" allowed)
         **kwargs,
     ):
-        workload = kwargs.get("workload_name", None)
-        so_future = kwargs.get("so_future", None)
-        force_past_vae = kwargs.get("force_past_vae", False)
-        if workload.startswith("JOB") or workload.startswith("CEB"):
-            path_to_vae_statedict = "../vae/CEB_64.ckpt"
-        elif workload.startswith("STACK"):
-            assert so_future is not None, (
-                "Must specify future or past for stackoverflow workload (--so_future True for future, False for past)"
-            )
-            if so_future and not force_past_vae:
-                path_to_vae_statedict = "../vae/SO_Future_64.ckpt"
-            else:
-                path_to_vae_statedict = "../vae/SO_Past_64.ckpt"
-        else:
-            raise ValueError(f"Unknown workload {workload}")
-
-        print(f"Using VAE state dict: {path_to_vae_statedict}")
-
         self.path_to_vae_statedict = path_to_vae_statedict
         self.dim = dim
         self.task_specific_args = task_specific_args
@@ -94,7 +79,6 @@ class InfoTransformerVAEOptimization(Optimize):
             workload_name=self.workload_name,
             allow_cross_joins=self.allow_cross_joins,
             worst_init_x=self.init_train_x[self.init_train_y.argmin()],
-            so_future=self.so_future,
         )
         # if train zs have not been pre-computed for particular vae, compute them
         #   by passing initialization selfies through vae
@@ -132,7 +116,7 @@ class InfoTransformerVAEOptimization(Optimize):
             self.init_train_y (a tensor of scores/y's)
             self.init_censoring (a binary tensor indicating censoring for censored obs only)
         """
-        if self.init_w_llm:  # init w/ yimeng's LLM generated queries
+        if self.init_w_llm:  # init w/ BOLT's LLM generated queries
             # "150tasks_samples_temp07.jsonl"
             # "250tasks_samples_temp07.jsonl"
             init_data_path = f"../initialization_data/{self.init_w_llm_n_tasks}tasks_samples_temp07.jsonl"
@@ -156,33 +140,19 @@ class InfoTransformerVAEOptimization(Optimize):
             self.init_train_y = y
             self.worst_runtime_observed = self.init_train_y.min().item() * -1
         elif self.init_w_bao:
-            if self.workload_name.startswith("JOB"):
-                init_data_path = "../initialization_data/bao_censored_initializations.csv"
-                df = pd.read_csv(init_data_path, sep=";")  # (5537, 6)
-                df = df[df["query_name"] == self.workload_name]  # (49, 6)
-                xs_key = "plan"
-                censoring_key = "censored"
-                job = True
-            elif self.workload_name.startswith("CEB"):
-                init_data_path = "../initialization_data/ceb_3k_bao_initialization.csv"
+            init_data_path = f"../initialization_data/bao_censored_initializations.csv"
+            df = pd.read_csv(init_data_path, sep=";")  # (5537, 6)
+            df = df[df["query_name"] == self.workload_name]  # (49, 6)
+            xs_key = "plan"
+            censoring_key = "censored"
+            ceb_3k = False
+            if df.shape[0] == 0:
+                init_data_path = f"../initialization_data/ceb_3k_bao_initialization.csv"
                 df = pd.read_csv(init_data_path)  # (146363, 8)
                 df = df[df["query_name"] == self.workload_name]  # (49, 8)
                 xs_key = "encoded_plan"
                 censoring_key = "timed_out"
-                job = False
-            elif self.workload_name.startswith("STACK"):
-                if self.so_future:
-                    init_data_path = "../initialization_data/so_future_bao_init.csv"
-                else:
-                    init_data_path = "../initialization_data/so_past_bao_init.csv"
-                df = pd.read_csv(init_data_path, sep=";")  # (49, 6)
-                df = df[df["query"] == self.workload_name]
-                xs_key = "encoded"
-                censoring_key = "timed_out"
-                job = False
-            else:
-                assert 0, f"no bao init data for workload {self.workload_name}"
-
+                ceb_3k = True
             if df.shape[0] == 0:
                 assert 0, f"no bao init data for workload {self.workload_name}"
 
@@ -193,7 +163,7 @@ class InfoTransformerVAEOptimization(Optimize):
             x = [xi.split(",") for xi in x]
             x = [[int(xj) for xj in xi] for xi in x]  # len(x) 49
             censoring = df[censoring_key].values  # (49,)
-            if job:
+            if not ceb_3k:
                 censoring_temp = np.zeros(y.shape)  # (49,)
                 # 1 --> censored, 0 --> uncensored
                 censoring_temp[censoring] = censoring_temp[censoring] + 1.0
@@ -210,9 +180,8 @@ class InfoTransformerVAEOptimization(Optimize):
             self.init_train_x = x
             self.init_train_y = y
             self.worst_runtime_observed = self.init_train_y.min().item() * -1
-
         elif self.init_w_random:
-            init_data_path = "../initialization_data/random_runs.csv"
+            init_data_path = f"../initialization_data/random_runs.csv"
             df = pd.read_csv(init_data_path, sep=";")  # (34557, 4)
             df = df[df["query_name"] == self.workload_name]  # (456, 4)
             y = df["runtime_secs"].values  # (456,)
@@ -249,9 +218,16 @@ class InfoTransformerVAEOptimization(Optimize):
                 not_enough_init_data = len(x) < self.num_initialization_points
 
             if (not os.path.exists(init_data_path)) or not_enough_init_data:
-                raise ValueError(
-                    f"Initialization data file {init_data_path} does not exist or does not contain enough data points. "
+                print("Creating and saving file of random init data points")
+                create_init_data_aliases(
+                    workload_name=self.workload_name,
+                    timeout=self.init_data_timeout,
+                    which_language=self.which_query_language,
+                    N=self.num_initialization_points,
+                    vae_latent_space_dim=self.dim,
+                    path_to_vae=self.path_to_vae_statedict,
                 )
+                print(f"Initialization data saved, will load in this data for all future runs of {self.workload_name}")
 
             df = pd.read_csv(init_data_path)
 

@@ -1,24 +1,25 @@
-import os
+import torch
+
+torch.set_float32_matmul_precision("highest")
 import sys
 
 sys.path.append("../")
-
-import signal
-import time
-import warnings
-
-import fire
+import random
 import numpy as np
 import pandas as pd
-import torch
-import wandb
-from lolbo.latent_space_objective import LatentSpaceObjective
-from lolbo.lolbo import LOLBOState
-from utils.set_seed import set_seed
+import fire
+import warnings
 
-torch.set_float32_matmul_precision("highest")
 warnings.filterwarnings("ignore")
+import os
+
 os.environ["WANDB_SILENT"] = "True"
+from lolbo.lolbo import LOLBOState
+from lolbo.latent_space_objective import LatentSpaceObjective
+import signal
+import copy
+import time
+from utils.set_seed import set_seed
 
 try:
     import wandb
@@ -62,14 +63,12 @@ class Optimize(object):
     def __init__(
         self,
         workload_name: str,
-        so_future=None,
         task_id: str = "db",
         seed: int = None,
         track_with_wandb: bool = True,
-        wandb_entity: str = "nmaus-penn",
+        wandb_entity: str = "xxx",
         wandb_project_name: str = "",
         max_n_oracle_calls: int = 4_000,
-        max_n_steps_multi: int = 15,  # max_n_oracle_calls * max_n_steps_multi = Max number of BO steps (in case we exhaust search space), default comes out to 75,000
         max_non_parallel_runtime_hours: int = None,
         learning_rte: float = 0.01,
         acq_func: str = "ts",
@@ -92,18 +91,15 @@ class Optimize(object):
         which_query_language="aliases",
         vanilla_bo=False,
         save_freq=10,
-        flag_post_icml=True,
         flag_correct_adding_vae_decode_time=True,
         allow_cross_joins=True,
         init_w_random=False,  # use random no-cross join data to init BO
         init_w_bao=True,  # use data from Bao to init BO
         init_w_llm=False,
-        init_w_llm_n_tasks=150,  # 150, 250
+        init_w_llm_n_tasks=150,
         eulbo=False,
         use_kg_eulbo=False,
-        thompson_rejection=True,
-        PAS=False,
-        force_past_vae: bool = False,
+        thompson_rejection=False,
     ):
         signal.signal(signal.SIGINT, self.handler)
         # add all local args to method args dict to be logged by wandb
@@ -123,11 +119,10 @@ class Optimize(object):
 
         self.eulbo = eulbo
         self.use_kg_eulbo = use_kg_eulbo
-        self.allow_cross_joins = allow_cross_joins  # TODO: implement this during VAE decoding maybe?
+        self.allow_cross_joins = allow_cross_joins
         self.save_vae_ckpt = save_vae_ckpt
-        self.flag_post_icml = flag_post_icml
         self.flag_correct_adding_vae_decode_time = flag_correct_adding_vae_decode_time
-        self.recenter_only = recenter_only  # only recenter, no E2E
+        self.recenter_only = recenter_only  # only recenter, no E2E, unlike LOLBO
         self.method_args = {}
         self.method_args["init"] = locals()
         del self.method_args["init"]["self"]
@@ -159,9 +154,6 @@ class Optimize(object):
         set_seed(seed)
         self.seed = seed
         self.thompson_rejection = thompson_rejection
-        self.PAS = PAS
-        self.so_future = so_future
-        self.max_bo_steps = max_n_oracle_calls * max_n_steps_multi
         if wandb_project_name:  # if project name specified
             self.wandb_project_name = wandb_project_name
         else:  # otherwise use defualt
@@ -236,7 +228,6 @@ class Optimize(object):
             eulbo=self.eulbo,
             use_kg_eulbo=self.use_kg_eulbo,
             thompson_rejection=self.thompson_rejection,
-            PAS=self.PAS,
         )
         return self
 
@@ -259,29 +250,12 @@ class Optimize(object):
         return self
 
     def create_wandb_tracker(self):
-        if "JOB" in self.workload_name:
-            tags = [
-                "JOB",
-            ]
-        elif "CEB" in self.workload_name:
-            tags = [
-                "CEB",
-            ]
-        elif "STACK" in self.workload_name:
-            tags = ["STACK", "STACK_NEW"]
-        else:
-            print("WARNING: workload name not recognized, setting tag to 'UNKNOWN'")
-            tags = [
-                "UNKNOWN",
-            ]
-
         if self.track_with_wandb:
             config_dict = {k: v for method_dict in self.method_args.values() for k, v in method_dict.items()}
             self.tracker = wandb.init(
                 project=self.wandb_project_name,
                 entity=self.wandb_entity,
                 config=config_dict,
-                tags=tags,
             )
             self.wandb_run_name = wandb.run.name
         else:
@@ -335,7 +309,6 @@ class Optimize(object):
                 # also log queue wait time so we can check that out:
                 "time_wait_in_oracle_queue": self.lolbo_state.time_wait_in_oracle_queue,
                 "running_total_oracle_query_time": self.running_total_oracle_query_time,
-                "BO_step": self.n_iters,
             }
             self.tracker.log(dict_log)
             for tau in self.lolbo_state.timeouts_for_log:
@@ -369,16 +342,14 @@ class Optimize(object):
 
         self.lolbo_state.time_update_dataset_w_new_points = 0
         self.time_full_opt_loop = 0
-        self.n_iters = 0
+        n_iters = 0
         # main optimization loop
         contine_run_condition = True
         while contine_run_condition:
             start_full_opt_loop_time = time.time()
             self.log_data_to_wandb_on_each_loop()
             if self.max_non_parallel_runtime_hours is None:
-                contine_run_condition = (self.lolbo_state.objective.num_calls < self.max_n_oracle_calls) and (
-                    self.n_iters < self.max_bo_steps
-                )
+                contine_run_condition = self.lolbo_state.objective.num_calls < self.max_n_oracle_calls
             else:
                 total_non_parallel_runtime_so_far_hours = self.total_non_parallel_runtime_so_far / 3600
                 contine_run_condition = total_non_parallel_runtime_so_far_hours < self.max_non_parallel_runtime_hours
@@ -402,10 +373,10 @@ class Optimize(object):
                     print("\nNew best found:")
                     self.print_progress_update()
                 self.lolbo_state.new_best_found = False
-            if (self.n_iters % self.save_freq) == 0:  # save all collected data every save_freq iterations
+            if (n_iters % self.save_freq) == 0:  # save all collected data every save_freq iterations
                 self.save_all_collected_data()
             self.time_full_opt_loop = time.time() - start_full_opt_loop_time
-            self.n_iters += 1
+            n_iters += 1
 
         # if verbose, print final results
         if self.verbose:
@@ -475,7 +446,6 @@ class Optimize(object):
         return self
 
     def done(self):
-        wandb.finish()
         return None
 
 

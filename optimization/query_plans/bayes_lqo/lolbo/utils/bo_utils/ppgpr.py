@@ -2,15 +2,15 @@ import torch
 
 torch.set_float32_matmul_precision("highest")
 # ppgpr
+from .base import DenseNetwork
 import gpytorch
 import torch
-from botorch.posteriors.gpytorch import GPyTorchPosterior
-from gpytorch.distributions import MultivariateNormal
 from gpytorch.models import ApproximateGP
-from gpytorch.variational import CholeskyVariationalDistribution, VariationalStrategy
+from gpytorch.variational import CholeskyVariationalDistribution
+from gpytorch.variational import VariationalStrategy
+from botorch.posteriors.gpytorch import GPyTorchPosterior
 from lolbo.utils.bo_utils.censored_likelihood import CensoredGaussianLikelihood
-
-from .base import DenseNetwork
+from gpytorch.distributions import MultivariateNormal
 
 # Multi-task Variational GP:
 # https://docs.gpytorch.ai/en/v1.4.2/examples/04_Variational_and_Approximate_GPs/SVGP_Multitask_GP_Regression.html

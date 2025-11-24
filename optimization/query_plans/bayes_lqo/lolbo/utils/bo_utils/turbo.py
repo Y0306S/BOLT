@@ -1,12 +1,12 @@
 import math
-from dataclasses import dataclass
-
 import torch
+from dataclasses import dataclass
+from torch.quasirandom import SobolEngine
 from botorch.acquisition import qExpectedImprovement
 from botorch.optim import optimize_acqf
-from torch import Tensor
-from torch.quasirandom import SobolEngine
+from .approximate_gp import *
 
+# from botorch.generation.sampling import MaxPosteriorSampling
 from .constrained_max_posterior_sampling import MaxPosteriorSampling
 
 
@@ -163,7 +163,6 @@ def generate_batch(
     absolute_bounds=None,
     constraint_model_list=None,
     vanilla_bo=False,  # don't use turbo tr at all
-    PAS=False,
 ):
     assert acqf in ("ts", "ei")
     if constraint_model_list is not None:
@@ -208,44 +207,7 @@ def generate_batch(
         except:
             acqf = "ts"
 
-    if acqf == "ts" and PAS:
-        with torch.no_grad():
-            acq_values = []
-            for x_cand in X:
-                sobol = SobolEngine(X.shape[-1], scramble=True)
-                local_X_cand = generate_candidates_PAS(x_cand, state, 100, sobol)
-                thompson_sampling = MaxPosteriorSampling(
-                    model=model,
-                    constraint_models=constraint_model_list,
-                    replacement=False,
-                    constrained=constrained,
-                )
-                top_acq_values, _ = thompson_sampling(local_X_cand.cuda(), num_samples=1, return_acq=True)
-
-                acq_values.append(top_acq_values)
-
-        max_acq_values_batch = torch.tensor(acq_values)
-        scaled_max_acq_value_batch = (max_acq_values_batch - max_acq_values_batch.min()) / (
-            max_acq_values_batch.max() - max_acq_values_batch.min()
-        )
-
-        scaled_max_acq_value_batch = scaled_max_acq_value_batch * (Y.max() - Y.min())
-        score = Y.squeeze() + scaled_max_acq_value_batch
-        _, tr_index = torch.topk(score, 1)
-        print(f"Best index: {tr_index}")
-
-        x_center = X[tr_index, :].clone()
-        x_cand = generate_candidates_PAS(x_center, state, n_candidates, SobolEngine(X.shape[-1], scramble=True))
-        thompson_sampling = MaxPosteriorSampling(
-            model=model,
-            constraint_models=constraint_model_list,
-            replacement=False,
-            constrained=constrained,
-        )
-        with torch.no_grad():
-            X_next = thompson_sampling(x_cand, num_samples=batch_size)
-
-    elif acqf == "ts":
+    if acqf == "ts":
         dim = X.shape[-1]
         tr_lb = tr_lb.cuda()
         tr_ub = tr_ub.cuda()
@@ -277,41 +239,7 @@ def generate_batch(
             replacement=False,
             constrained=constrained,
         )
-        # Note this is definitely suboptimal, but working around it will require a lot of changes
-        try:
-            with torch.no_grad():
-                X_next = thompson_sampling(X_cand.cuda(), num_samples=batch_size)
-        except:  # noqa: E722
-            # Sampling entirely failed, return first candidate
-            X_next = X_cand[0].unsqueeze(0)
+        with torch.no_grad():
+            X_next = thompson_sampling(X_cand.cuda(), num_samples=batch_size)
 
     return X_next
-
-
-def generate_candidates_PAS(
-    x_center: Tensor,
-    state: TurboState,
-    n_candidates: int,
-    sobol: SobolEngine,
-) -> Tensor:
-    x_center = x_center.cuda()
-    dim, dtype, device = x_center.shape[-1], x_center.dtype, x_center.device
-    prob_perturb = min(20.0 / dim, 1.0)
-
-    weights = torch.ones_like(x_center) * 8
-    tr_lb = x_center - weights * state.length / 2.0
-    tr_ub = x_center + weights * state.length / 2.0
-
-    tr_lb = tr_lb.cuda()
-    tr_ub = tr_ub.cuda()
-    pert = sobol.draw(n_candidates).to(dtype=dtype).cuda()
-    pert = tr_lb + (tr_ub - tr_lb) * pert
-
-    mask = torch.rand(n_candidates, dim, dtype=dtype, device=device) <= prob_perturb
-    ind = torch.where(mask.sum(dim=1) == 0)[0]
-    mask[ind, torch.randint(0, dim - 1, size=(len(ind),), device=device)] = 1
-
-    X_cand = x_center.expand(n_candidates, dim).clone()
-    X_cand[mask] = pert[mask]
-
-    return X_cand

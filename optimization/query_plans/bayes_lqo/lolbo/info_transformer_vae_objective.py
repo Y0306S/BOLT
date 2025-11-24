@@ -1,17 +1,13 @@
-import sys
-
 import numpy as np
 import torch
+import sys
 
 sys.path.append("../")
-import time
-
-import wandb
 from lolbo.latent_space_objective import LatentSpaceObjective
-from oracle.oracle import plan_has_crossjoin
 from vae.model import VAEModule
-from your_tasks.your_blackbox_constraints import CONSTRAINT_FUNCTIONS_DICT
 from your_tasks.your_objective_functions import OBJECTIVE_FUNCTIONS_DICT
+from your_tasks.your_blackbox_constraints import CONSTRAINT_FUNCTIONS_DICT
+from oracle.oracle import plan_has_crossjoin
 
 
 class InfoTransformerVAEObjective(LatentSpaceObjective):
@@ -33,10 +29,9 @@ class InfoTransformerVAEObjective(LatentSpaceObjective):
         shared_vae=None,
         which_query_language="aliases",
         worst_runtime_observed=200,
-        workload_name="JOB_6F",
+        workload_name="CEB_1A10",
         allow_cross_joins=True,
         worst_init_x=None,
-        so_future=None,
     ):
         self.dim = dim
         self.path_to_vae_statedict = path_to_vae_statedict
@@ -48,7 +43,6 @@ class InfoTransformerVAEObjective(LatentSpaceObjective):
             which_language=which_query_language,
             worst_runtime_observed=worst_runtime_observed,
             workload_name=workload_name,
-            so_future=so_future,
         )
         if not allow_cross_joins:
             assert worst_init_x is not None
@@ -106,9 +100,9 @@ class InfoTransformerVAEObjective(LatentSpaceObjective):
 
     def query_oracle(self, x, timeouts_list=None):
         if timeouts_list is None:
-            scores_list, censoring_list = retry_function(self.objective_function, args=(x,))  # type: ignore
+            scores_list, censoring_list = self.objective_function(x)
         else:
-            scores_list, censoring_list = retry_function(self.objective_function, args=(x, timeouts_list))  # type: ignore
+            scores_list, censoring_list = self.objective_function(x, timeouts_list)
         return scores_list, censoring_list
 
     def initialize_vae(self):
@@ -160,23 +154,3 @@ class InfoTransformerVAEObjective(LatentSpaceObjective):
             all_cvals.append(cvals)
 
         return torch.cat(all_cvals, -1)
-
-
-def retry_function(func, max_retries: int = 8192, args: tuple = (), kwargs: dict = {}):
-    try:
-        name = wandb.run.name
-    except:
-        name = "no name"
-
-    for attempt in range(1, max_retries + 1):
-        try:
-            result = func(*args, **kwargs)
-            return result
-        except Exception as e:
-            err = f"!! ORACLE ATTEMPT {attempt} failed: {str(e)} !! Run name: {name}\n"
-            print(err)
-
-            if attempt == max_retries:
-                print(f"All {max_retries} attempts failed. Raising the last error.")
-                raise
-            time.sleep(5)

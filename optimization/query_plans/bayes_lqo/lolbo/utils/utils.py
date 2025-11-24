@@ -1,7 +1,6 @@
-import math
-
 import torch
-from torch.utils.data import DataLoader, TensorDataset
+import math
+from torch.utils.data import TensorDataset, DataLoader
 
 
 def update_models_end_to_end_unconstrained(
@@ -74,7 +73,7 @@ def update_models_end_to_end_with_constraints(
     if train_c_scores is not None:
         for c_model in c_models:
             c_model.train()
-            optimize_list.append({"params": c_model.parameters(), "lr": learning_rte})
+            optimize_list.append({f"params": c_model.parameters(), "lr": learning_rte})
     optimizer = torch.optim.Adam(optimize_list, lr=learning_rte)
 
     # max batch size smaller to avoid memory limit with longer strings (more tokens)

@@ -1,17 +1,21 @@
 import sys
 
 sys.path.append("../")
-import copy
-import math
-
-import gpytorch
 import torch
-from botorch.generation.sampling import MaxPosteriorSampling
-from gpytorch.utils.quadrature import GaussHermiteQuadrature1D
-from linear_operator.operators import TriangularLinearOperator
+import math
+import copy
+from torch.utils.data import TensorDataset, DataLoader
+import gpytorch
+from botorch.acquisition.analytic import ExpectedImprovement
+from botorch.acquisition import qExpectedImprovement
+from botorch.acquisition.analytic import LogExpectedImprovement
+from botorch.acquisition.logei import qLogExpectedImprovement
+from gpytorch.mlls import MarginalLogLikelihood
 from torch.autograd import Variable
+from gpytorch.utils.quadrature import GaussHermiteQuadrature1D
 from torch.quasirandom import SobolEngine
-from torch.utils.data import DataLoader, TensorDataset
+from botorch.generation.sampling import MaxPosteriorSampling
+from linear_operator.operators import TriangularLinearOperator
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 softplus_func = torch.nn.Softplus()

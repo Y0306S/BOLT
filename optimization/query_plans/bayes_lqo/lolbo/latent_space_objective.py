@@ -1,22 +1,10 @@
-import sys
-
 import torch
-
-sys.path.append("../")
-
-from oracle.oracle import WorkloadSpec, _resolve_codec
 
 torch.set_float32_matmul_precision("highest")
 
-import time
-
 import numpy as np
 import torch
-
-
-def canonicalize(x: list, workload_spec: WorkloadSpec):
-    codec = _resolve_codec(workload_spec)
-    return codec.encode(codec.decode(workload_spec.query_tables, x))
+import time
 
 
 class LatentSpaceObjective:
@@ -70,8 +58,6 @@ class LatentSpaceObjective:
         if decoded_xs is None:
             decoded_xs = self.vae_decode(z)
 
-        decoded_xs = [canonicalize(x, self.objective_function.full_workload_spec) for x in decoded_xs]
-
         scores = []
         cens = []
         xs_to_be_queired = []
@@ -104,7 +90,6 @@ class LatentSpaceObjective:
             computed_scores, computed_censoring = self.query_oracle(xs_to_be_queired)
         else:
             computed_scores, computed_censoring = self.query_oracle(xs_to_be_queired, timeouts_to_be_queried)
-
         TIME_WAIT_IN_QUEUE_AND_QUERY_ORACLE = time.time() - start_time_query_oracle
         TIME_QUERY_ORACLE_non_parallel = self.objective_function.total_non_parallel_runtime
 

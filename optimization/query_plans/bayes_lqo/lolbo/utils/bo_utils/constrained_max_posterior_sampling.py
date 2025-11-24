@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Optional
+from unittest import runner
 
 import torch
 from botorch.acquisition.objective import (
@@ -7,9 +8,12 @@ from botorch.acquisition.objective import (
     # ScalarizedObjective,
 )
 from botorch.generation.utils import _flip_sub_unique
-from lolbo.utils.bo_utils.censored_likelihood import CensoredGaussianLikelihood
+from botorch.models.model import Model
 from torch import Tensor
 from torch.nn import Module
+
+from lolbo.utils.bo_utils.censored_likelihood import CensoredGaussianLikelihood
+
 
 # Code copied form botorch MaxPosteriorSampling class
 # https://botorch.org/api/_modules/botorch/generation/sampling.html
@@ -78,7 +82,6 @@ class MaxPosteriorSampling(SamplingStrategy):
         num_samples: int = 1,
         observation_noise: bool = False,
         max_constr_val: int = 0,
-        return_acq: bool = False,
     ) -> Tensor:
         r"""Sample from the model posterior.
 
@@ -201,13 +204,5 @@ class MaxPosteriorSampling(SamplingStrategy):
         # now if the model is batched batch_shape will not necessarily be the
         # batch_shape of X, so we expand X to the proper shape
         Xe = X.expand(*obj.shape[1:], X.size(-1))
-        idxs = torch.unique(idcs, dim=-1)
-
-        # Obj: [2, 100]
-        # idxs: [2, 1]
-        acq = torch.gather(obj, -1, idxs)
-        X_next = torch.gather(Xe, -2, idcs)  # means use the idcs to index dimension -2
-        if return_acq:
-            return acq, X_next
         # finally we can gather along the N dimension
-        return X_next
+        return torch.gather(Xe, -2, idcs)  # means use the idcs to index dimension -2
