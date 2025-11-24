@@ -30,9 +30,7 @@ This directory contains scripts for generating training data and sampling from f
     python generate_gpt4_ft_data.py
     ```
 
-## Dependencies
+### OpenAI Fine-tuning
 
-- `openai`
-- `pandas`
-- `tqdm`
-- `token_count` (optional, for counting tokens)
+The generated JSONL files can be uploaded directly to the [OpenAI Fine-tuning Dashboard](https://platform.openai.com/finetune) to create a fine-tuned model.
+
