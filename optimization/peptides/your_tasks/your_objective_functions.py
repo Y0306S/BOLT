@@ -106,37 +106,8 @@ class ApexObjective(ObjectiveFunction):
         # turn scores into a numpy array
         scores = np.array(scores)
 
-        if self.score_version == "mean":
-            # average MIC across all bacteria
-            scores = -scores.mean(axis=1)
-        elif self.score_version == "min":
-            # lowest MIC across all bacteria
-            scores = -scores.max(axis=1)
-        elif self.score_version == "max":
-            # max MIC across all bacteria
-            scores = -scores.min(axis=1)
-        elif self.score_version == "gramneg_mean":
-            # optimize first 7 entries of the score vector, which correspond to gram-negative bacteria
-            scores = -scores[:, :7].mean(axis=1)
-        elif self.score_version == "grampos_mean":
-            # optimize last 4 entries of the score vector, which correspond to gram-positive bacteria
-            scores = -scores[:, 7:].mean(axis=1)
-        elif self.score_version == "gramnegonly_mean":
-            # optimize first 7 entries of the score vector, while penalizing the last 4 entries by a factor of 10 to make sure we are not optimizing for them
-            # the penalty is applied only if the MIC value is smaller than 32, signalling antimicrobial activity
-            penalty = 100
-            scores = -scores[:, :7].mean(axis=1) - penalty * (32 - scores[:, 7:]).clip(
-                min=0
-            ).sum(axis=1)
-        elif self.score_version == "gramposonly_mean":
-            # optimize last 4 entries of the score vector, while penalizing the first 7 entries by a factor of 10 to make sure we are not optimizing for them
-            # the penalty is applied only if the MIC value is smaller than 32, signalling antimicrobial activity
-            penalty = 100
-            scores = -scores[:, 7:].mean(axis=1) - penalty * (32 - scores[:, :7]).clip(
-                min=0
-            ).sum(axis=1)
-        elif self.score_version == "bacteria_0":
-            # optimize the first bacteria only
+        if self.score_version == "bacteria_0":
+            # optimize for A Baumanni predicted MIC
             scores = -scores[:, 0]
         else:
             assert 0
