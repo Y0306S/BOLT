@@ -1,4 +1,4 @@
-# APEX pathogen - predicting species-specific antimicrobial activity against pathogens using deep learning
+# APEX oracle
 
 ## Predict AMPs using APEX
 By running APEX_predict.py, species-specific antmicrobial activties (MICs) of peptides in test_seqs.txt will be generated and saved in Predicted_MICs.csv.
@@ -36,18 +36,7 @@ APEX_models.py: defines the neural network architecture of APEX
 
 utils.py: helper functions
 
-aaindex1.csv: amino acid embeddings (freezed during training, obtained from https://www.genome.jp/aaindex/)
-
-test_seqs.txt: example input of APEX_predict.py; each line is a peptide sequence (<= 50 amino acids)
-
-Predicted_MICs.csv: example output of APEX_predict.py
-
 APEX_predict.py: predict species-specific antmicrobial activties (minimum inhibitory concentration [MIC]; unit: uM) against 11 pathogens for peptides in test_seqs.txt. We use 8 APEX models trained under different neural network architectures or training strategies to make predictions. Predictions from the base learners will be averaged to generate the final activity prediction. 
-
-
-
-## Software version
-pytorch: 1.11.0+cu113
 
 
 ## Contacts
