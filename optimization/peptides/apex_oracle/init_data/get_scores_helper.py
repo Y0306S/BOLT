@@ -16,9 +16,11 @@ sys.path.append(os.path.dirname(os.path.dirname(current_dir)))
 
 from apex_oracle import apex_wrapper
 
+
 def abaumannii_wrapper(seqs):
     scores = apex_wrapper(seqs)
-    return - scores[:, 0]
+    return -scores[:, 0]
+
 
 def process_in_chunks(data, chunk_size, process_function):
     # Process the data in chunks and stack results
@@ -31,6 +33,7 @@ def process_in_chunks(data, chunk_size, process_function):
         results.append(result)  # Collect each chunk's result
     # Stack all results vertically
     return np.vstack(results)
+
 
 def process_in_chunks_single_bacteria(data, chunk_size, process_function):
     # Process the data in chunks and stack results
@@ -45,7 +48,6 @@ def process_in_chunks_single_bacteria(data, chunk_size, process_function):
     return np.hstack(results)
 
 
-
 x_list = pd.read_csv(file_path, header=None, skip_blank_lines=False)[0].to_list()
 
 # replace nan with empty string
@@ -53,7 +55,7 @@ x_list = ["" if x != x else x for x in x_list]
 
 # replace empty string with the one before it
 for i in range(1, len(x_list)):
-    if i % 1000 !=0:
+    if i % 1000 != 0:
         if x_list[i] == "":
             x_list[i] = x_list[i - 1]
     else:

@@ -26,7 +26,8 @@ def decoder_lr_sched(step):
     else:
         if (step - ENCODER_WARMUP_STEPS + 1) % AGGRESSIVE_STEPS == 0:
             return min(
-                (step - ENCODER_WARMUP_STEPS) / (DECODER_WARMUP_STEPS * AGGRESSIVE_STEPS),
+                (step - ENCODER_WARMUP_STEPS)
+                / (DECODER_WARMUP_STEPS * AGGRESSIVE_STEPS),
                 1.0,
             )
         else:
@@ -75,7 +76,9 @@ def gumbel_softmax(
     """
     if randoms is None:
         randoms = (
-            -torch.empty_like(logits, memory_format=torch.legacy_contiguous_format).exponential_().log()
+            -torch.empty_like(logits, memory_format=torch.legacy_contiguous_format)
+            .exponential_()
+            .log()
         )  # ~Gumbel(0,1)
     gumbels = (logits + randoms) / tau  # ~Gumbel(logits,tau)
     y_soft = gumbels.softmax(dim)
@@ -83,7 +86,9 @@ def gumbel_softmax(
     if hard:
         # Straight through.
         index = y_soft.max(dim, keepdim=True)[1]
-        y_hard = torch.zeros_like(logits, memory_format=torch.legacy_contiguous_format).scatter_(dim, index, 1.0)
+        y_hard = torch.zeros_like(
+            logits, memory_format=torch.legacy_contiguous_format
+        ).scatter_(dim, index, 1.0)
         ret = y_hard - y_soft.detach() + y_soft
     else:
         # Reparametrization trick.
@@ -137,9 +142,9 @@ class InfoTransformerVAE(pl.LightningModule):
     ):
         super().__init__()
 
-        assert (
-            bottleneck_size is not None
-        ), "Dont set bottleneck_size to None. Unbounded sequences dont support this yet"
+        assert bottleneck_size is not None, (
+            "Dont set bottleneck_size to None. Unbounded sequences dont support this yet"
+        )
 
         self.max_string_length = 1024  # by default
 
@@ -159,13 +164,21 @@ class InfoTransformerVAE(pl.LightningModule):
         self.n_samples_mmd = n_samples_mmd
         encoder_embedding_dim = 2 * d_model
 
-        self.encoder_token_embedding = nn.Embedding(num_embeddings=self.vocab_size, embedding_dim=encoder_embedding_dim)
+        self.encoder_token_embedding = nn.Embedding(
+            num_embeddings=self.vocab_size, embedding_dim=encoder_embedding_dim
+        )
         self.encoder_position_encoding = PositionalEncoding(
             encoder_embedding_dim, dropout=encoder_dropout, max_len=5_000
         )
-        self.decoder_token_embedding = nn.Embedding(num_embeddings=self.vocab_size, embedding_dim=d_model)
-        self.decoder_position_encoding = PositionalEncoding(d_model, dropout=decoder_dropout, max_len=5_000)
-        self.decoder_token_unembedding = nn.Parameter(torch.randn(d_model, self.vocab_size))
+        self.decoder_token_embedding = nn.Embedding(
+            num_embeddings=self.vocab_size, embedding_dim=d_model
+        )
+        self.decoder_position_encoding = PositionalEncoding(
+            d_model, dropout=decoder_dropout, max_len=5_000
+        )
+        self.decoder_token_unembedding = nn.Parameter(
+            torch.randn(d_model, self.vocab_size)
+        )
         self.encoder = nn.TransformerEncoder(
             nn.TransformerEncoderLayer(
                 d_model=encoder_embedding_dim,
@@ -207,12 +220,18 @@ class InfoTransformerVAE(pl.LightningModule):
     def generate_pad_mask(self, tokens):
         """Generate mask that tells encoder to ignore all but first stop token"""
         mask = tokens == 1
-        inds = mask.float().argmax(dim=-1)  # Returns first index along axis when multiple present
+        inds = mask.float().argmax(
+            dim=-1
+        )  # Returns first index along axis when multiple present
         mask[torch.arange(0, tokens.shape[0]), inds] = False
         return mask
 
     def encode(self, tokens, as_probs=False):
-        embed = tokens @ self.encoder_token_embedding.weight if as_probs else self.encoder_token_embedding(tokens)
+        embed = (
+            tokens @ self.encoder_token_embedding.weight
+            if as_probs
+            else self.encoder_token_embedding(tokens)
+        )
 
         embed = self.encoder_position_encoding(embed)
 
@@ -244,7 +263,9 @@ class InfoTransformerVAE(pl.LightningModule):
         embed = self.decoder_position_encoding(embed)
 
         # TODO: Mask out all stop tokens but the first?
-        tgt_mask = nn.Transformer.generate_square_subsequent_mask(sz=embed.shape[1]).to(self.device)
+        tgt_mask = nn.Transformer.generate_square_subsequent_mask(sz=embed.shape[1]).to(
+            self.device
+        )
         decoding = self.decoder(tgt=embed, memory=z, tgt_mask=tgt_mask)
         logits = decoding @ self.decoder_token_unembedding
 
@@ -267,23 +288,32 @@ class InfoTransformerVAE(pl.LightningModule):
 
         z = z.reshape(n, -1, self.d_model)
 
-        tokens = torch.zeros(n, 1, device=self.device).long()  # Start token is 0, stop token is 1
+        tokens = torch.zeros(
+            n, 1, device=self.device
+        ).long()  # Start token is 0, stop token is 1
         random_gumbels = torch.zeros(n, 0, self.vocab_size, device=self.device)
         while True:  # Loop until every peptide hits a stop token
             tgt = self.decoder_token_embedding(tokens)
             tgt = self.decoder_position_encoding(tgt)
-            tgt_mask = nn.Transformer.generate_square_subsequent_mask(sz=tokens.shape[-1]).to(self.device)
+            tgt_mask = nn.Transformer.generate_square_subsequent_mask(
+                sz=tokens.shape[-1]
+            ).to(self.device)
 
             decoding = self.decoder(tgt=tgt, memory=z, tgt_mask=tgt_mask)
             logits = decoding @ self.decoder_token_unembedding
-            sample, randoms = gumbel_softmax(logits, dim=-1, hard=True, return_randoms=True)
+            sample, randoms = gumbel_softmax(
+                logits, dim=-1, hard=True, return_randoms=True
+            )
 
-            tokens = torch.cat([tokens, sample[:, -1, :].argmax(dim=-1)[:, None]], dim=-1)
+            tokens = torch.cat(
+                [tokens, sample[:, -1, :].argmax(dim=-1)[:, None]], dim=-1
+            )
             random_gumbels = torch.cat([random_gumbels, randoms], dim=1)
 
             # 1 is the stop token. Check if all peptides have a stop token in them
             if (
-                torch.all((tokens == 1).sum(dim=-1) > 0).item() or tokens.shape[-1] > self.max_string_length
+                torch.all((tokens == 1).sum(dim=-1) > 0).item()
+                or tokens.shape[-1] > self.max_string_length
             ):  # no longer break at 1024, instead variable max string length
                 break
 
@@ -318,7 +348,9 @@ class InfoTransformerVAE(pl.LightningModule):
 
         return dict(
             cycle_loss=(f * gaussian_nll(z, mu, sigma).mean(dim=(1, 2))).mean(),
-            valid_loss=((f - 0.5) * F.cross_entropy(logits.permute(0, 2, 1), tokens)).mean(),
+            valid_loss=(
+                (f - 0.5) * F.cross_entropy(logits.permute(0, 2, 1), tokens)
+            ).mean(),
             frac_valid=f.mean(),
             frac_valid_unique=n_unique / n_valid,
             cycle_sigma_mean=sigma.mean(),
@@ -347,13 +379,17 @@ class InfoTransformerVAE(pl.LightningModule):
 
         logits = self.decode(z, tokens)
 
-        recon_loss = F.cross_entropy(logits.permute(0, 2, 1), tokens, reduction="none").mean()  # .sum(1).mean(0)
+        recon_loss = F.cross_entropy(
+            logits.permute(0, 2, 1), tokens, reduction="none"
+        ).mean()  # .sum(1).mean(0)
 
         # No need for KL divergence when \alpha = 1
         # see https://ojs.aaai.org//index.php/AAAI/article/view/4538 Eq. 6
         # Equation from the original "Auto-Encoding Variational Bayes" paper: https://arxiv.org/pdf/1312.6114.pdf
         sigma2 = sigma.pow(2)
-        kldiv = 0.5 * (mu.pow(2) + sigma2 - sigma2.log() - 1).mean()  # .sum(dim=(1, 2)).mean(0)
+        kldiv = (
+            0.5 * (mu.pow(2) + sigma2 - sigma2.log() - 1).mean()
+        )  # .sum(dim=(1, 2)).mean(0)
 
         if self.mmd_factor != 0:  # avoid unnessary computation
             z_p1 = self._flatten_z(self.sample_posterior(mu, sigma, self.n_samples_mmd))
@@ -386,7 +422,9 @@ class InfoTransformerVAE(pl.LightningModule):
 
         loss = primary_loss
         if self.cycle_factor > 0 or self.valid_factor > 0:
-            consistency_losses = self.consistency_losses(self.sample_prior(tokens.shape[0]))
+            consistency_losses = self.consistency_losses(
+                self.sample_prior(tokens.shape[0])
+            )
             if self.cycle_factor != 0:
                 loss = loss + self.cycle_factor * consistency_losses["cycle_loss"]
             if self.valid_factor != 0:
@@ -402,7 +440,10 @@ class InfoTransformerVAE(pl.LightningModule):
             kldiv=kldiv,
             mmd_loss=mmd_loss,
             recon_token_acc=(logits.argmax(dim=-1) == tokens).float().mean(),
-            recon_string_acc=(logits.argmax(dim=-1) == tokens).all(dim=1).float().mean(dim=0),
+            recon_string_acc=(logits.argmax(dim=-1) == tokens)
+            .all(dim=1)
+            .float()
+            .mean(dim=0),
             sigma_mean=sigma.mean(),
             **consistency_losses,
         )
@@ -479,7 +520,9 @@ class VAEModule(pl.LightningModule):
                 dict(params=decoder_params, lr=self.decoder_lr),
             ]
         )
-        lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, [encoder_lr_sched, decoder_lr_sched])
+        lr_scheduler = torch.optim.lr_scheduler.LambdaLR(
+            optimizer, [encoder_lr_sched, decoder_lr_sched]
+        )
 
         return dict(
             optimizer=optimizer,
@@ -508,7 +551,10 @@ def load(dataset_path, checkpoint_path):
     # dataset = ProtiensDataset(dataset_path)
     dataset = DatasetKmers(dataset_path)
     module = VAEModule.load_from_checkpoint(
-        checkpoint_path, map_location=torch.device("cpu"), dataset=dataset, kl_factor=0.1
+        checkpoint_path,
+        map_location=torch.device("cpu"),
+        dataset=dataset,
+        kl_factor=0.1,
     )
 
     return dict(dataset=dataset, module=module, model=module.model)

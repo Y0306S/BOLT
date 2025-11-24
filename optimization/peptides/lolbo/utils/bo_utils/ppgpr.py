@@ -11,7 +11,9 @@ from gpytorch.variational import CholeskyVariationalDistribution, VariationalStr
 
 class GPModel(ApproximateGP):
     def __init__(self, inducing_points, likelihood):
-        variational_distribution = CholeskyVariationalDistribution(inducing_points.size(0))
+        variational_distribution = CholeskyVariationalDistribution(
+            inducing_points.size(0)
+        )
         variational_strategy = VariationalStrategy(
             self,
             inducing_points,
@@ -29,7 +31,9 @@ class GPModel(ApproximateGP):
         covar_x = self.covar_module(x)
         return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)  # type: ignore
 
-    def posterior(self, X, output_indices=None, observation_noise=False, *args, **kwargs) -> GPyTorchPosterior:
+    def posterior(
+        self, X, output_indices=None, observation_noise=False, *args, **kwargs
+    ) -> GPyTorchPosterior:
         self.eval()  # make sure model is in eval mode
         self.likelihood.eval()
         dist = self.likelihood(self(X))
@@ -40,11 +44,13 @@ class GPModel(ApproximateGP):
 # gp model with deep kernel
 class GPModelDKL(ApproximateGP):
     def __init__(self, inducing_points, likelihood, hidden_dims=(256, 256)):
-        feature_extractor = DenseNetwork(input_dim=inducing_points.size(-1), hidden_dims=hidden_dims).to(
-            inducing_points.device
-        )
+        feature_extractor = DenseNetwork(
+            input_dim=inducing_points.size(-1), hidden_dims=hidden_dims
+        ).to(inducing_points.device)
         inducing_points = feature_extractor(inducing_points)
-        variational_distribution = CholeskyVariationalDistribution(inducing_points.size(0))
+        variational_distribution = CholeskyVariationalDistribution(
+            inducing_points.size(0)
+        )
         variational_strategy = VariationalStrategy(
             self,
             inducing_points,
@@ -69,7 +75,9 @@ class GPModelDKL(ApproximateGP):
         x = self.feature_extractor(x)
         return super().__call__(x, *args, **kwargs)
 
-    def posterior(self, X, output_indices=None, observation_noise=False, *args, **kwargs) -> GPyTorchPosterior:
+    def posterior(
+        self, X, output_indices=None, observation_noise=False, *args, **kwargs
+    ) -> GPyTorchPosterior:
         self.eval()  # make sure model is in eval mode
         self.likelihood.eval()
         dist = self.likelihood(self(X))

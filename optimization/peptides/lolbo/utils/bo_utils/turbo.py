@@ -97,7 +97,9 @@ def update_state_constrained(state, Y_next, C_next):
 
         # Case 1: if best valid candidate found has a higher obj value that incumbent best
         # count a success, the obj valuse has been improved
-        imporved_obj = max(Valid_Y_next) > state.best_value + 1e-3 * math.fabs(state.best_value)
+        imporved_obj = max(Valid_Y_next) > state.best_value + 1e-3 * math.fabs(
+            state.best_value
+        )
         # Case 2: if incumbent best violates constraints
         # count a success, we now have suggested a point which is valid and therfore better
         obtained_validity = torch.all(state.best_constraint_values > 0)

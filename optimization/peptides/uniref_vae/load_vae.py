@@ -59,33 +59,33 @@ def load_uniref_vae(
 
 
 def vae_forward(xs_batch, dataobj, vae):
-    ''' Input: 
-            a list xs 
-        Output: 
-            z: tensor of resultant latent space codes 
-                obtained by passing the xs through the encoder
-            vae_loss: the total loss of a full forward pass
-                of the batch of xs through the vae 
-                (ie reconstruction error)
-    '''
-    # assumes xs_batch is a batch of smiles strings 
+    """Input:
+        a list xs
+    Output:
+        z: tensor of resultant latent space codes
+            obtained by passing the xs through the encoder
+        vae_loss: the total loss of a full forward pass
+            of the batch of xs through the vae
+            (ie reconstruction error)
+    """
+    # assumes xs_batch is a batch of smiles strings
     tokenized_seqs = dataobj.tokenize_sequence(xs_batch)
     encoded_seqs = [dataobj.encode(seq).unsqueeze(0) for seq in tokenized_seqs]
     X = collate_fn(encoded_seqs)
     dict = vae(X.cuda())
-    vae_loss, z = dict['loss'], dict['z']
-    z = z.reshape(-1,256)
+    vae_loss, z = dict["loss"], dict["z"]
+    z = z.reshape(-1, 256)
 
     return z, vae_loss
 
 
 def vae_decode(z, vae, dataobj):
-    '''Input
-            z: a tensor latent space points (bsz, self.dim)
-        Output
-            a corresponding list of the decoded input space 
-            items output by vae decoder 
-    '''
+    """Input
+        z: a tensor latent space points (bsz, self.dim)
+    Output
+        a corresponding list of the decoded input space
+        items output by vae decoder
+    """
     z = z.cuda()
     vae = vae.eval()
     vae = vae.cuda()

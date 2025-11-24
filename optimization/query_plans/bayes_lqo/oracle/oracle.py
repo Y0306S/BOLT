@@ -56,7 +56,9 @@ def _decode_query(workload: WorkloadSpec, encoded: list[int]) -> str:
     join_clause = join_tree.to_join_clause()
 
     if workload.pg_hint_plan_join_order:
-        return f"/*+\nLeading({join_tree.to_order_hint()})\n{join_tree.to_operator_hint()}\n*/\n{workload.query_template}"
+        return (
+            f"/*+\nLeading({join_tree.to_order_hint()})\n{join_tree.to_operator_hint()}\n*/\n{workload.query_template}"
+        )
     return f"/*+\n{join_tree.to_operator_hint()}\n*/\n{workload.query_template.format(join_clause)}"
 
 
@@ -66,9 +68,7 @@ def plan_has_crossjoin(workload: WorkloadSpec, encoded: list[int]) -> bool:
     return _join_tree_has_crossjoin(workload, join_tree)
 
 
-def _crossjoin_at_branch(
-    workload: WorkloadSpec, left: JoinTree, right: JoinTree
-) -> bool:
+def _crossjoin_at_branch(workload: WorkloadSpec, left: JoinTree, right: JoinTree) -> bool:
     left_aliases = left.tables_aliases()
     right_aliases = right.tables_aliases()
 
@@ -102,9 +102,7 @@ def _execute_query(spec: WorkloadSpec, input: WorkloadInput) -> QueryResult:
     query = _decode_query(spec, input.encoded_query)
     # print(query)
     timeout_ms = input.timeout_secs * 1000
-    execution_spec = QueryExecutionSpec(
-        id=input.id, query=query, timeout_secs=input.timeout_secs
-    )
+    execution_spec = QueryExecutionSpec(id=input.id, query=query, timeout_secs=input.timeout_secs)
 
     with psycopg.connect(host=DB_HOST, user=DB_USER, password=DB_PASSWORD) as conn:
         with conn.cursor() as cur:
@@ -120,9 +118,7 @@ def _execute_query(spec: WorkloadSpec, input: WorkloadInput) -> QueryResult:
                     elapsed_secs=end_time - start_time,
                 )
             except psycopg.errors.QueryCanceled:
-                return TimedOutQuery(
-                    spec=execution_spec, elapsed_secs=timeout_ms / 1000
-                )
+                return TimedOutQuery(spec=execution_spec, elapsed_secs=timeout_ms / 1000)
             except Exception as e:
                 end_time = time.time()
                 return FailedQuery(
@@ -132,9 +128,7 @@ def _execute_query(spec: WorkloadSpec, input: WorkloadInput) -> QueryResult:
                 )
 
 
-def oracle(
-    workload: WorkloadSpec, workload_inputs: list[WorkloadInput]
-) -> list[QueryResult]:
+def oracle(workload: WorkloadSpec, workload_inputs: list[WorkloadInput]) -> list[QueryResult]:
     results = []
     for input in workload_inputs:
         result = _execute_query(workload, input)

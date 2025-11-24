@@ -10,8 +10,9 @@ output_path = "data/example_finetuning_data.jsonl"
 excluded_tasks = ""
 included_tasks = None
 
+
 def extract_task_id(task):
-    pattern = r'^.*[a-zA-Z]'
+    pattern = r"^.*[a-zA-Z]"
     match = re.search(pattern, task)
     if match:
         return match.group(0)
@@ -23,7 +24,7 @@ def get_task_description(task):
     # Note: This function assumes a 'workload' directory exists with SQL files.
     # Users should provide their own workload files or adjust the paths below.
     if not os.path.exists("./workload"):
-        return "SELECT * FROM table" # Placeholder return if workload dir is missing
+        return "SELECT * FROM table"  # Placeholder return if workload dir is missing
 
     workload_group = task.split("_")[0].lower()
     task = task.split("_")[1].lower()
@@ -31,15 +32,24 @@ def get_task_description(task):
     if workload_group == "job":
         with open(f"./workload/job/{task}.sql") as f:
             return f.read()
-    elif workload_group == "ceb": # assume 3k for now, ignore 13k
-
+    elif workload_group == "ceb":  # assume 3k for now, ignore 13k
         # get task id from task, everything before and including last alphabet character (a~z)
         task_id = extract_task_id(task)
 
         with open(f"./workload/ceb-3k/{task_id}/{task}.sql") as f:
             return f.read()
 
-sample_prompt = {"messages": [{"role": "system", "content": "You are a helpful assistant that provides efficient orderings for given queries."}, {"role": "user", "content": ""}, {"role": "assistant", "content": ""}]}
+
+sample_prompt = {
+    "messages": [
+        {
+            "role": "system",
+            "content": "You are a helpful assistant that provides efficient orderings for given queries.",
+        },
+        {"role": "user", "content": ""},
+        {"role": "assistant", "content": ""},
+    ]
+}
 
 
 all_tasks = pd.read_csv(raw_data_path)
@@ -81,12 +91,14 @@ for i, row in all_tasks.iterrows():
 with open(output_path, "w") as f:
     # shuffle
     import random
+
     random.shuffle(train_jsonl)
     for line in train_jsonl:
         f.write(line + "\n")
 
 
 from token_count import TokenCount
+
 tc = TokenCount(model_name="gpt-4o-mini-2024-07-18")
 # count tokens in the training data
 tokens = tc.num_tokens_from_file(output_path)

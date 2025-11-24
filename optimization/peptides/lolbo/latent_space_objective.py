@@ -114,11 +114,15 @@ class LatentSpaceObjective:
             the corresponding list of scores y,
             or np.nan in the case that x is an invalid input
         """
-        raise NotImplementedError("Must implement query_oracle() specific to desired optimization task")
+        raise NotImplementedError(
+            "Must implement query_oracle() specific to desired optimization task"
+        )
 
     def initialize_vae(self):
         """Sets variable self.vae to the desired pretrained vae"""
-        raise NotImplementedError("Must implement method initialize_vae() to load in vae for desired optimization task")
+        raise NotImplementedError(
+            "Must implement method initialize_vae() to load in vae for desired optimization task"
+        )
 
     def vae_forward(self, xs_batch):
         """Input:
@@ -130,7 +134,9 @@ class LatentSpaceObjective:
                 of the batch of xs through the vae
                 (ie reconstruction error)
         """
-        raise NotImplementedError("Must implement method vae_forward() (forward pass of vae)")
+        raise NotImplementedError(
+            "Must implement method vae_forward() (forward pass of vae)"
+        )
 
     def compute_constraints(self, xs_batch):
         """Input:

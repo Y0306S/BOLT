@@ -7,6 +7,7 @@ from gpytorch.mlls import PredictiveLogLikelihood
 
 import os
 import sys
+
 file_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(file_dir)
 sys.path.append(f"{parent_dir}")
@@ -44,12 +45,12 @@ class LOLBOState:
         self.train_y = train_y  # initial train y data
         self.train_z = train_z  # initial train z data
         self.train_c = train_c  # initial constraint values data
-        self.minimize = (
-            minimize  # if True we want to minimize the objective, otherwise we assume we want to maximize the objective
-        )
+        self.minimize = minimize  # if True we want to minimize the objective, otherwise we assume we want to maximize the objective
         self.k = k  # track and update on top k scoring points found
         self.num_update_epochs = num_update_epochs  # num epochs update models
-        self.init_n_epochs = init_n_epochs  # num epochs train surr model on initial data
+        self.init_n_epochs = (
+            init_n_epochs  # num epochs train surr model on initial data
+        )
         self.learning_rte = learning_rte  # lr to use for model updates
         self.bsz = bsz  # acquisition batch size
         self.acq_func = acq_func  # acquisition function (Expected Improvement (ei) or Thompson Sampling (ts))
@@ -87,7 +88,9 @@ class LOLBOState:
         """Initialize top k x, y, and zs"""
         # if we have constriants, the top k are those that meet constraints!
         if self.train_c is not None:
-            bool_arr = torch.all(self.train_c <= 0, dim=-1)  # all constraint values <= 0
+            bool_arr = torch.all(
+                self.train_c <= 0, dim=-1
+            )  # all constraint values <= 0
             vaid_train_y = self.train_y[bool_arr]
             valid_train_z = self.train_z[bool_arr]
             valid_train_x = np.array(self.train_x)[bool_arr]
@@ -102,7 +105,9 @@ class LOLBOState:
             self.best_x_seen = valid_train_x[torch.argmax(vaid_train_y.squeeze())]
 
             # track top k scores found
-            self.top_k_scores, top_k_idxs = torch.topk(vaid_train_y.squeeze(), min(self.k, vaid_train_y.shape[0]))
+            self.top_k_scores, top_k_idxs = torch.topk(
+                vaid_train_y.squeeze(), min(self.k, vaid_train_y.shape[0])
+            )
             self.top_k_scores = self.top_k_scores.tolist()
             top_k_idxs = top_k_idxs.tolist()
             self.top_k_xs = [valid_train_x[i] for i in top_k_idxs]
@@ -129,7 +134,9 @@ class LOLBOState:
 
     def initialize_tr_state(self):
         if self.train_c is not None:  # if constrained
-            bool_arr = torch.all(self.train_c <= 0, dim=-1)  # all constraint values <= 0
+            bool_arr = torch.all(
+                self.train_c <= 0, dim=-1
+            )  # all constraint values <= 0
             vaid_train_y = self.train_y[bool_arr]
             valid_c_vals = self.train_c[bool_arr]
         else:
@@ -141,7 +148,9 @@ class LOLBOState:
             if self.minimize:
                 best_value = torch.inf
             if self.train_c is not None:
-                best_constraint_values = torch.ones(1, self.train_c.shape[1]) * torch.inf
+                best_constraint_values = (
+                    torch.ones(1, self.train_c.shape[1]) * torch.inf
+                )
         else:
             best_value = torch.max(vaid_train_y).item()
             if self.train_c is not None:
@@ -164,8 +173,12 @@ class LOLBOState:
         for _i in range(self.train_c.shape[1]):
             likelihood = gpytorch.likelihoods.GaussianLikelihood().cuda()
             n_pts = min(self.train_z.shape[0], 1024)
-            c_model = GPModelDKL(self.train_z[:n_pts, :].cuda(), likelihood=likelihood).cuda()
-            c_mll = PredictiveLogLikelihood(c_model.likelihood, c_model, num_data=self.train_z.size(-2))
+            c_model = GPModelDKL(
+                self.train_z[:n_pts, :].cuda(), likelihood=likelihood
+            ).cuda()
+            c_mll = PredictiveLogLikelihood(
+                c_model.likelihood, c_model, num_data=self.train_z.size(-2)
+            )
             c_model = c_model.eval()
             # c_model = self.model.cuda()
             self.c_models.append(c_model)
@@ -177,14 +190,20 @@ class LOLBOState:
         n_pts = min(self.train_z.shape[0], 1024)
         if self.surrogate_type == "gp_dkl":
             print("Using GP DKL surrogate model")
-            self.model = GPModelDKL(self.train_z[:n_pts, :].cuda(), likelihood=likelihood).cuda()
+            self.model = GPModelDKL(
+                self.train_z[:n_pts, :].cuda(), likelihood=likelihood
+            ).cuda()
         elif self.surrogate_type == "gp_saas":
             print("Using MAP SaaS GP surrogate model")
-            self.model = MAPSaasGPModel(self.train_z[:n_pts, :].cuda(), likelihood=likelihood).cuda()
+            self.model = MAPSaasGPModel(
+                self.train_z[:n_pts, :].cuda(), likelihood=likelihood
+            ).cuda()
         else:
             raise ValueError(f"Surrogate type {self.surrogate_type} not recognized")
 
-        self.mll = PredictiveLogLikelihood(self.model.likelihood, self.model, num_data=self.train_z.size(-2))
+        self.mll = PredictiveLogLikelihood(
+            self.model.likelihood, self.model, num_data=self.train_z.size(-2)
+        )
         self.model = self.model.eval()
         self.model = self.model.cuda()
 
@@ -220,25 +239,35 @@ class LOLBOState:
                     self.top_k_scores.append(score.item())
                     self.top_k_xs.append(x_next_[i])
                     self.top_k_zs.append(z_next_[i].unsqueeze(-2))
-                    if self.train_c is not None:  # if constrained, update best constraints too
+                    if (
+                        self.train_c is not None
+                    ):  # if constrained, update best constraints too
                         self.top_k_cs.append(c_next_[i].unsqueeze(-2))
-                elif score.item() > min(self.top_k_scores) and (x_next_[i] not in self.top_k_xs):
+                elif score.item() > min(self.top_k_scores) and (
+                    x_next_[i] not in self.top_k_xs
+                ):
                     # if the score is better than the worst score in the top k list, upate the list
                     min_score = min(self.top_k_scores)
                     min_idx = self.top_k_scores.index(min_score)
                     self.top_k_scores[min_idx] = score.item()
                     self.top_k_xs[min_idx] = x_next_[i]
                     self.top_k_zs[min_idx] = z_next_[i].unsqueeze(-2)  # .cuda()
-                    if self.train_c is not None:  # if constrained, update best constraints too
+                    if (
+                        self.train_c is not None
+                    ):  # if constrained, update best constraints too
                         self.top_k_cs[min_idx] = c_next_[i].unsqueeze(-2)
                 # if this is the first valid example we've found, OR if we imporve
-                if (self.best_score_seen is None) or (score.item() > self.best_score_seen):
+                if (self.best_score_seen is None) or (
+                    score.item() > self.best_score_seen
+                ):
                     self.progress_fails_since_last_e2e = 0
                     progress = True
                     self.best_score_seen = score.item()  # update best
                     self.best_x_seen = x_next_[i]
                     self.new_best_found = True
-        if (not progress) and acquisition:  # if no progress msde, increment progress fails
+        if (
+            not progress
+        ) and acquisition:  # if no progress msde, increment progress fails
             self.progress_fails_since_last_e2e += 1
         y_next_ = y_next_.unsqueeze(-1)
         if acquisition:
@@ -271,7 +300,9 @@ class LOLBOState:
             else:
                 train_c = None
 
-        self.model = update_surr_model(self.model, self.mll, self.learning_rte, train_z, train_y, n_epochs)
+        self.model = update_surr_model(
+            self.model, self.mll, self.learning_rte, train_z, train_y, n_epochs
+        )
         if self.train_c is not None:
             self.c_models = update_constraint_surr_models(
                 self.c_models,
@@ -337,7 +368,9 @@ class LOLBOState:
         if self.train_c is not None:
             for c_model in self.c_models:
                 c_model.train()
-                optimize_list.append({"params": c_model.parameters(), "lr": self.learning_rte})
+                optimize_list.append(
+                    {"params": c_model.parameters(), "lr": self.learning_rte}
+                )
         optimizer1 = torch.optim.Adam(optimize_list, lr=self.learning_rte)
         new_xs = self.train_x[-self.bsz :]
         train_x = new_xs + self.top_k_xs
@@ -367,14 +400,20 @@ class LOLBOState:
                     if self.train_c is not None:
                         for ix, c_model in enumerate(self.c_models):
                             pred2 = c_model(valid_zs.cuda())
-                            loss += -self.c_mlls[ix](pred2, constraints_tensor[:, ix].cuda())
+                            loss += -self.c_mlls[ix](
+                                pred2, constraints_tensor[:, ix].cuda()
+                            )
                     optimizer1.zero_grad()
                     loss.backward()
-                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+                    torch.nn.utils.clip_grad_norm_(
+                        self.model.parameters(), max_norm=1.0
+                    )
                     optimizer1.step()
                     with torch.no_grad():
                         z = z.detach().cpu()
-                        self.update_next(z, scores_arr, xs_list, c_next_=constraints_tensor)
+                        self.update_next(
+                            z, scores_arr, xs_list, c_next_=constraints_tensor
+                        )
             torch.cuda.empty_cache()
         self.model.eval()
         if self.train_c is not None:

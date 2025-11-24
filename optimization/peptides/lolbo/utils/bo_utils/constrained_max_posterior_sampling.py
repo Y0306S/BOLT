@@ -80,20 +80,32 @@ class MaxPosteriorSampling(SamplingStrategy):
             if samples.shape[-1] > 1:
                 # NOTE: this assumes that model returns a vector where the first number is the objective
                 # function value and the remaining values are predicted constraint values
-                constraint_samples = samples[:, :, 1:]  #  bsz x N x c   ie ([10, 5000, 1])
-                samples = samples[:, :, 0].unsqueeze(-1)  #  bsz x N x 1   ie torch.Size([10, 5000, 1])
+                constraint_samples = samples[
+                    :, :, 1:
+                ]  #  bsz x N x c   ie ([10, 5000, 1])
+                samples = samples[:, :, 0].unsqueeze(
+                    -1
+                )  #  bsz x N x 1   ie torch.Size([10, 5000, 1])
             # Case 2: Seperate Model for each Constraint (in list self.constraint_models)
             elif self.constraint_models is not None:
                 all_constraint_samples = []
                 for constr_model in self.constraint_models:
-                    constraint_posterior = constr_model.posterior(X, observation_noise=observation_noise)
-                    constr_samples = constraint_posterior.rsample(sample_shape=torch.Size([num_samples]))
+                    constraint_posterior = constr_model.posterior(
+                        X, observation_noise=observation_noise
+                    )
+                    constr_samples = constraint_posterior.rsample(
+                        sample_shape=torch.Size([num_samples])
+                    )
                     all_constraint_samples.append(constr_samples)
                 constraint_samples = torch.cat(all_constraint_samples, dim=-1)
 
-            valid_samples = constraint_samples <= max_constr_val  # bsz x N x c  torch.Size([10, 5000, 1])
+            valid_samples = (
+                constraint_samples <= max_constr_val
+            )  # bsz x N x c  torch.Size([10, 5000, 1])
             if valid_samples.shape[-1] > 1:  # more than one constraint
-                valid_samples = torch.all(valid_samples, dim=-1).unsqueeze(-1)  # # bsz x N x 1  (remains to be tested)
+                valid_samples = torch.all(valid_samples, dim=-1).unsqueeze(
+                    -1
+                )  # # bsz x N x 1  (remains to be tested)
             # if all elements violate constraints
             if valid_samples.sum() == 0:
                 # if none of the samples meet the constraints

@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader, Dataset
 
 import os
 import sys
+
 file_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(file_dir)
 sys.path.append(f"{parent_dir}")
@@ -25,30 +26,61 @@ class DataModuleKmers(pl.LightningDataModule):
             raise RuntimeError("Invalid data version")
         self.train = DatasetClass(dataset="train", k=k, load_data=load_data)
         self.val = DatasetClass(
-            dataset="val", k=k, vocab=self.train.vocab, vocab2idx=self.train.vocab2idx, load_data=load_data
+            dataset="val",
+            k=k,
+            vocab=self.train.vocab,
+            vocab2idx=self.train.vocab2idx,
+            load_data=load_data,
         )
         self.test = DatasetClass(
-            dataset="test", k=k, vocab=self.train.vocab, vocab2idx=self.train.vocab2idx, load_data=load_data
+            dataset="test",
+            k=k,
+            vocab=self.train.vocab,
+            vocab2idx=self.train.vocab2idx,
+            load_data=load_data,
         )
 
     def train_dataloader(self):
         return DataLoader(
-            self.train, batch_size=self.batch_size, pin_memory=True, shuffle=True, collate_fn=collate_fn, num_workers=10
+            self.train,
+            batch_size=self.batch_size,
+            pin_memory=True,
+            shuffle=True,
+            collate_fn=collate_fn,
+            num_workers=10,
         )
 
     def val_dataloader(self):
         return DataLoader(
-            self.val, batch_size=self.batch_size, pin_memory=True, shuffle=False, collate_fn=collate_fn, num_workers=10
+            self.val,
+            batch_size=self.batch_size,
+            pin_memory=True,
+            shuffle=False,
+            collate_fn=collate_fn,
+            num_workers=10,
         )
 
     def test_dataloader(self):
         return DataLoader(
-            self.test, batch_size=self.batch_size, pin_memory=True, shuffle=False, collate_fn=collate_fn, num_workers=10
+            self.test,
+            batch_size=self.batch_size,
+            pin_memory=True,
+            shuffle=False,
+            collate_fn=collate_fn,
+            num_workers=10,
         )
 
 
 class DatasetKmers(Dataset):  # asssuming train data
-    def __init__(self, dataset="train", data_path=None, k=3, vocab=None, vocab2idx=None, load_data=False):
+    def __init__(
+        self,
+        dataset="train",
+        data_path=None,
+        k=3,
+        vocab=None,
+        vocab2idx=None,
+        load_data=False,
+    ):
         self.dataset = dataset
         self.k = k
         vocab_path = f"./uniref_vae/{k}mer_vocab.csv"
@@ -69,12 +101,23 @@ class DatasetKmers(Dataset):  # asssuming train data
 
         # first get initial vocab set
         if vocab is None:
-            self.regular_vocab = set(token for seq in regular_data for token in seq)  # 21 tokens
+            self.regular_vocab = set(
+                token for seq in regular_data for token in seq
+            )  # 21 tokens
             self.regular_vocab.discard(".")
             if "-" not in self.regular_vocab:
-                self.regular_vocab.add("-")  # '-' used as pad token when length of sequence is not a multiple of k
-            self.vocab = ["".join(kmer) for kmer in itertools.product(self.regular_vocab, repeat=k)]  # 21**k tokens
-            self.vocab = ["<start>", "<stop>", *sorted(list(self.vocab))]  # 21**k + 2 tokens
+                self.regular_vocab.add(
+                    "-"
+                )  # '-' used as pad token when length of sequence is not a multiple of k
+            self.vocab = [
+                "".join(kmer)
+                for kmer in itertools.product(self.regular_vocab, repeat=k)
+            ]  # 21**k tokens
+            self.vocab = [
+                "<start>",
+                "<stop>",
+                *sorted(list(self.vocab)),
+            ]  # 21**k + 2 tokens
 
             # save vocab for next time...
             vocab_arr = np.array(self.vocab)
@@ -134,7 +177,9 @@ class DatasetKmers(Dataset):  # asssuming train data
         return tokenized_sequences
 
     def encode(self, tokenized_sequence):
-        return torch.tensor([self.vocab2idx[s] for s in [*tokenized_sequence, "<stop>"]])
+        return torch.tensor(
+            [self.vocab2idx[s] for s in [*tokenized_sequence, "<stop>"]]
+        )
 
     def decode(self, tokens):
         """
@@ -145,7 +190,9 @@ class DatasetKmers(Dataset):  # asssuming train data
         # Chop out start token and everything past (and including) first stop token
         stop = dec.index("<stop>") if "<stop>" in dec else None  # want first stop token
         protien = dec[0:stop]  # cut off stop tokens
-        while "<start>" in protien:  # start at last start token (I've seen one case where it started w/ 2 start tokens)
+        while (
+            "<start>" in protien
+        ):  # start at last start token (I've seen one case where it started w/ 2 start tokens)
             start = 1 + dec.index("<start>")
             protien = protien[start:]
         protien = "".join(protien)  # combine into single string

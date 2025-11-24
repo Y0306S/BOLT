@@ -52,7 +52,9 @@ class ConstraintFunction:
                 a tensor of shape (len(x_list),)
                 has associated raw constraint function values for each x in x_list
         """
-        raise NotImplementedError("Must implement method query_black_box() for the black box constraint")
+        raise NotImplementedError(
+            "Must implement method query_black_box() for the black box constraint"
+        )
 
 
 class ExampleLengthConstraint(ConstraintFunction):

@@ -119,7 +119,9 @@ def update_models_end_to_end_with_constraints(
 
 def update_surr_model(model, mll, learning_rte, train_z, train_y, n_epochs):
     model = model.train()
-    optimizer = torch.optim.Adam([{"params": model.parameters(), "lr": learning_rte}], lr=learning_rte)
+    optimizer = torch.optim.Adam(
+        [{"params": model.parameters(), "lr": learning_rte}], lr=learning_rte
+    )
     train_bsz = min(len(train_y), 128)
     train_dataset = TensorDataset(train_z.cuda(), train_y.cuda())
     train_loader = DataLoader(train_dataset, batch_size=train_bsz, shuffle=True)
@@ -146,7 +148,9 @@ def update_constraint_surr_models(
 ):
     updated_c_models = []
     for ix, c_model in enumerate(c_models):
-        updated_model = update_surr_model(c_model, c_mlls[ix], learning_rte, train_z, train_c[:, ix], n_epochs)
+        updated_model = update_surr_model(
+            c_model, c_mlls[ix], learning_rte, train_z, train_c[:, ix], n_epochs
+        )
         updated_c_models.append(updated_model)
 
     return updated_c_models

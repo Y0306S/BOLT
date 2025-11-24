@@ -34,7 +34,9 @@ class ObjectiveFunction:
                 objective function f on each x in x_list
                 or np.nan in the wherever x is an invalid input
         """
-        raise NotImplementedError("Must implement method query_black_box() for the black box objective")
+        raise NotImplementedError(
+            "Must implement method query_black_box() for the black box objective"
+        )
 
 
 class ExampleObjective(ObjectiveFunction):
@@ -123,12 +125,16 @@ class ApexObjective(ObjectiveFunction):
             # optimize first 7 entries of the score vector, while penalizing the last 4 entries by a factor of 10 to make sure we are not optimizing for them
             # the penalty is applied only if the MIC value is smaller than 32, signalling antimicrobial activity
             penalty = 100
-            scores = -scores[:, :7].mean(axis=1) - penalty * (32 - scores[:, 7:]).clip(min=0).sum(axis=1)
+            scores = -scores[:, :7].mean(axis=1) - penalty * (32 - scores[:, 7:]).clip(
+                min=0
+            ).sum(axis=1)
         elif self.score_version == "gramposonly_mean":
             # optimize last 4 entries of the score vector, while penalizing the first 7 entries by a factor of 10 to make sure we are not optimizing for them
             # the penalty is applied only if the MIC value is smaller than 32, signalling antimicrobial activity
             penalty = 100
-            scores = -scores[:, 7:].mean(axis=1) - penalty * (32 - scores[:, :7]).clip(min=0).sum(axis=1)
+            scores = -scores[:, 7:].mean(axis=1) - penalty * (32 - scores[:, :7]).clip(
+                min=0
+            ).sum(axis=1)
         elif self.score_version == "bacteria_0":
             # optimize the first bacteria only
             scores = -scores[:, 0]

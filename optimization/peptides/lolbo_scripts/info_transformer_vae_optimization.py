@@ -6,6 +6,7 @@ import torch
 
 import os
 import sys
+
 file_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(file_dir)
 sys.path.append(f"{parent_dir}")
@@ -14,12 +15,11 @@ from lolbo.info_transformer_vae_objective import ApexConstrainedDiverseObjective
 from lolbo_scripts.optimize import Optimize
 
 
-
 torch.set_num_threads(1)
 
 PATH_TO_VAE_STATE_DICT = os.path.join(
     parent_dir,
-    "uniref_vae/saved_models/dim128_k1_kl0001_eff256_dff256_pious-sea-2_model_state_epoch_118.pkl"
+    "uniref_vae/saved_models/dim128_k1_kl0001_eff256_dff256_pious-sea-2_model_state_epoch_118.pkl",
 )
 
 
@@ -34,16 +34,18 @@ class APEXConstrainedDiverseOptimization(Optimize):
         template_id: int | None = None,
         path_to_vae_statedict: str = PATH_TO_VAE_STATE_DICT,
         max_string_length: int = 50,
-        task_specific_args: list | None = None,  # list of additional args to be passed into objective funcion
+        task_specific_args: list
+        | None = None,  # list of additional args to be passed into objective funcion
         constraint_function_ids: list
         | None = None,  # list of strings identifying the black box constraint function to use
-        constraint_thresholds: list | None = None,  # list of corresponding threshold values (floats)
+        constraint_thresholds: list
+        | None = None,  # list of corresponding threshold values (floats)
         constraint_types: list
         | None = None,  # list of strings giving correspoding type for each threshold ("min" or "max" allowed)
         divf_id: str = "edit_dist",
-        init_data_path: str=None,
-        init_scores_path: str=None,
-        init_offset_helper: int=0,
+        init_data_path: str = None,
+        init_scores_path: str = None,
+        init_offset_helper: int = 0,
         **kwargs,
     ):
         if constraint_types is None:
@@ -74,13 +76,11 @@ class APEXConstrainedDiverseOptimization(Optimize):
 
         assert len(constraint_function_ids) == len(constraint_thresholds)
         assert len(constraint_thresholds) == len(constraint_types)
-        self.constraint_function_ids = (
-            constraint_function_ids  # list of strings identifying the black box constraint function to use
+        self.constraint_function_ids = constraint_function_ids  # list of strings identifying the black box constraint function to use
+        self.constraint_thresholds = (
+            constraint_thresholds  # list of corresponding threshold values (floats)
         )
-        self.constraint_thresholds = constraint_thresholds  # list of corresponding threshold values (floats)
-        self.constraint_types = (
-            constraint_types  # list of strings giving correspoding type for each threshold ("min" or "max" allowed)
-        )
+        self.constraint_types = constraint_types  # list of strings giving correspoding type for each threshold ("min" or "max" allowed)
 
         super().__init__(**kwargs)
 
@@ -122,7 +122,9 @@ class APEXConstrainedDiverseOptimization(Optimize):
             init_zs.append(zs.detach().cpu())
         init_zs = torch.cat(init_zs, dim=0)
         # now save the zs so we don't have to recompute them in the future:
-        state_dict_file_type = self.objective.path_to_vae_statedict.split(".")[-1]  # usually .pt or .ckpt
+        state_dict_file_type = self.objective.path_to_vae_statedict.split(".")[
+            -1
+        ]  # usually .pt or .ckpt
         path_to_init_train_zs = self.objective.path_to_vae_statedict.replace(
             f".{state_dict_file_type}", "-train-zs.csv"
         )
@@ -159,17 +161,17 @@ class APEXConstrainedDiverseOptimization(Optimize):
         file_dir = os.path.dirname(os.path.abspath(__file__))
         sys.path.append(f"{file_dir}")
 
-
         df = pd.read_csv(filename_seqs, header=None)
         train_x_seqs = df.values.squeeze().tolist()
         train_x_seqs = train_x_seqs[bacteria_num * 1000 : (bacteria_num + 1) * 1000]
-
 
         df = pd.read_csv(filename_scores, header=None)
         train_y = torch.from_numpy(df.values).float()
         train_y = train_y[bacteria_num * 1000 : (bacteria_num + 1) * 1000]
 
-        self.num_initialization_points = min(self.num_initialization_points, len(train_x_seqs))
+        self.num_initialization_points = min(
+            self.num_initialization_points, len(train_x_seqs)
+        )
         self.load_train_z()
         self.init_train_x = train_x_seqs[0 : self.num_initialization_points]
         train_y = train_y[0 : self.num_initialization_points]
@@ -179,8 +181,12 @@ class APEXConstrainedDiverseOptimization(Optimize):
     def load_train_z(
         self,
     ):
-        state_dict_file_type = self.path_to_vae_statedict.split(".")[-1]  # usually .pt or .ckpt
-        path_to_init_train_zs = self.path_to_vae_statedict.replace(f".{state_dict_file_type}", "-train-zs.csv")
+        state_dict_file_type = self.path_to_vae_statedict.split(".")[
+            -1
+        ]  # usually .pt or .ckpt
+        path_to_init_train_zs = self.path_to_vae_statedict.replace(
+            f".{state_dict_file_type}", "-train-zs.csv"
+        )
         # if we have a path to pre-computed train zs for vae, load them
         try:
             zs = pd.read_csv(path_to_init_train_zs, header=None).values

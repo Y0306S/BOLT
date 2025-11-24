@@ -6,6 +6,7 @@ import glob
 import math
 import sys
 import os
+
 file_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(f"{file_dir}")
 from APEX_models import AMP_model
@@ -56,8 +57,8 @@ def predict_APEX(seq_list):
             X_seq = torch.LongTensor(seq_rep).cuda()
 
             AMP_pred_batch = AMP_model(X_seq).cpu().detach().numpy()  # make predictions
-            AMP_pred_batch = 10 ** (
-                6 - AMP_pred_batch
+            AMP_pred_batch = (
+                10 ** (6 - AMP_pred_batch)
             )  # transform back to MICs; When training the APEX models, MICs were transformed by: -np.log10(MICs/float(1000000))
 
             if i == 0:

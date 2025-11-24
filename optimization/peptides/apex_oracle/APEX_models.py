@@ -6,7 +6,9 @@ import torch.nn.functional as F
 class PeptideEmbeddings(nn.Module):
     def __init__(self, emb):
         super().__init__()
-        self.aa_embedding = nn.Embedding.from_pretrained(torch.FloatTensor(emb), padding_idx=0)
+        self.aa_embedding = nn.Embedding.from_pretrained(
+            torch.FloatTensor(emb), padding_idx=0
+        )
 
     def forward(self, x):
         out = self.aa_embedding(x)
@@ -14,7 +16,9 @@ class PeptideEmbeddings(nn.Module):
 
 
 class AMP_model(nn.Module):
-    def __init__(self, emb, emb_size, num_rnn_layers, dim_h, dim_latent, num_fc_layers, num_task):
+    def __init__(
+        self, emb, emb_size, num_rnn_layers, dim_h, dim_latent, num_fc_layers, num_task
+    ):
         super().__init__()
 
         self.peptideEmb = PeptideEmbeddings(emb=emb)
@@ -24,7 +28,14 @@ class AMP_model(nn.Module):
         self.dim_latent = dim_latent
         max_len = 52
 
-        self.rnn = nn.GRU(emb_size, dim_h, num_layers=num_rnn_layers, batch_first=True, dropout=0.1, bidirectional=True)
+        self.rnn = nn.GRU(
+            emb_size,
+            dim_h,
+            num_layers=num_rnn_layers,
+            batch_first=True,
+            dropout=0.1,
+            bidirectional=True,
+        )
         self.layernorm = nn.LayerNorm(dim_h * 2)
         self.attn1 = nn.Linear(dim_h * 2 + emb_size, max_len)
         self.attn2 = nn.Linear(dim_h * 2, 1)
@@ -40,9 +51,9 @@ class AMP_model(nn.Module):
         self.ln2 = nn.LayerNorm(int(dim_latent / 2))
         self.ln3 = nn.LayerNorm(int(dim_latent / 4))
 
-        self.dp1 = nn.Dropout(0.1)  
-        self.dp2 = nn.Dropout(0.1)  
-        self.dp3 = nn.Dropout(0.1)  
+        self.dp1 = nn.Dropout(0.1)
+        self.dp2 = nn.Dropout(0.1)
+        self.dp3 = nn.Dropout(0.1)
 
         self.fc1_ = nn.Linear(dim_h, dim_latent)
         self.fc2_ = nn.Linear(dim_latent, int(dim_latent / 2))
@@ -53,19 +64,19 @@ class AMP_model(nn.Module):
         self.ln2_ = nn.LayerNorm(int(dim_latent / 2))
         self.ln3_ = nn.LayerNorm(int(dim_latent / 4))
 
-        self.dp1_ = nn.Dropout(0.1)  
-        self.dp2_ = nn.Dropout(0.1)  
-        self.dp3_ = nn.Dropout(0.1)  
+        self.dp1_ = nn.Dropout(0.1)
+        self.dp2_ = nn.Dropout(0.1)
+        self.dp3_ = nn.Dropout(0.1)
 
     def forward(self, x):
         x = self.peptideEmb(x)
         out, h = self.rnn(x)
         out = self.layernorm(out)
 
-        attn_weights1 = F.softmax(self.attn1(torch.cat((out, x), 2)), dim=2)  
+        attn_weights1 = F.softmax(self.attn1(torch.cat((out, x), 2)), dim=2)
         out = torch.bmm(attn_weights1, out)
-        attn_weights2 = F.softmax(self.attn2(out), dim=1)  
-        out = torch.sum(attn_weights2 * out, dim=1)  
+        attn_weights2 = F.softmax(self.attn2(out), dim=1)
+        out = torch.sum(attn_weights2 * out, dim=1)
 
         out = self.fc0(out)
 
@@ -81,14 +92,14 @@ class AMP_model(nn.Module):
 
     def clf_forward(self, x):
         x = self.peptideEmb(x)
-        
+
         out, h = self.rnn(x)
         out = self.layernorm(out)
 
-        attn_weights1 = F.softmax(self.attn1(torch.cat((out, x), 2)), dim=2)  
+        attn_weights1 = F.softmax(self.attn1(torch.cat((out, x), 2)), dim=2)
         out = torch.bmm(attn_weights1, out)
-        attn_weights2 = F.softmax(self.attn2(out), dim=1)  
-        out = torch.sum(attn_weights2 * out, dim=1) 
+        attn_weights2 = F.softmax(self.attn2(out), dim=1)
+        out = torch.sum(attn_weights2 * out, dim=1)
 
         out = self.fc0(out)
 

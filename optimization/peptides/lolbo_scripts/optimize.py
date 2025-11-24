@@ -9,6 +9,7 @@ import torch
 
 import os
 import sys
+
 file_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(file_dir)
 sys.path.append(f"{parent_dir}")
@@ -79,7 +80,9 @@ class Optimize:
         # signal.signal(signal.SIGINT, self.handler)
         # add all local args to method args dict to be logged by wandb
         self.save_vae_ckpt = save_vae_ckpt
-        self.log_table_freq = log_table_freq  # log all collcted data every log_table_freq oracle calls
+        self.log_table_freq = (
+            log_table_freq  # log all collcted data every log_table_freq oracle calls
+        )
         self.recenter_only = recenter_only  # only recenter, no E2E
         self.method_args = {}
         self.method_args["init"] = locals()
@@ -99,11 +102,13 @@ class Optimize:
         else:  # otherwise use defualt
             self.wandb_project_name = f"BOLT-{self.task_id}"
         if not WANDB_IMPORTED_SUCCESSFULLY:
-            assert not self.track_with_wandb, "Failed to import wandb, to track with wandb, try pip install wandb"
+            assert not self.track_with_wandb, (
+                "Failed to import wandb, to track with wandb, try pip install wandb"
+            )
         if self.track_with_wandb:
-            assert (
-                self.wandb_entity
-            ), "Must specify a valid wandb account username (wandb_entity) to run with wandb tracking"
+            assert self.wandb_entity, (
+                "Must specify a valid wandb account username (wandb_entity) to run with wandb tracking"
+            )
         if wandb_run_tags is None:
             self.wandb_run_tags = []
         else:
@@ -114,23 +119,31 @@ class Optimize:
         self.load_train_data()
         # initialize latent space objective (self.objective) for particular task
         self.initialize_objective()
-        assert isinstance(
-            self.objective, LatentSpaceObjective
-        ), "self.objective must be an instance of LatentSpaceObjective"
-        assert type(self.init_train_x) is list, "load_train_data() must set self.init_train_x to a list of xs"
+        assert isinstance(self.objective, LatentSpaceObjective), (
+            "self.objective must be an instance of LatentSpaceObjective"
+        )
+        assert type(self.init_train_x) is list, (
+            "load_train_data() must set self.init_train_x to a list of xs"
+        )
         if self.init_train_c is not None:  # if constrained
-            assert torch.is_tensor(self.init_train_c), "load_train_data() must set self.init_train_c to a tensor of cs"
-            assert (
-                self.init_train_c.shape[0] == len(self.init_train_x)
-            ), f"load_train_data() must initialize exactly the same number of cs and xs, instead got {len(self.init_train_x)} xs and {self.init_train_c.shape[0]} cs"
-        assert torch.is_tensor(self.init_train_y), "load_train_data() must set self.init_train_y to a tensor of ys"
-        assert torch.is_tensor(self.init_train_z), "load_train_data() must set self.init_train_z to a tensor of zs"
-        assert (
-            self.init_train_y.shape[0] == len(self.init_train_x)
-        ), f"load_train_data() must initialize exactly the same number of ys and xs, instead got {self.init_train_y.shape[0]} ys and {len(self.init_train_x)} xs"
-        assert (
-            self.init_train_z.shape[0] == len(self.init_train_x)
-        ), f"load_train_data() must initialize exactly the same number of zs and xs, instead got {self.init_train_z.shape[0]} zs and {len(self.init_train_x)} xs"
+            assert torch.is_tensor(self.init_train_c), (
+                "load_train_data() must set self.init_train_c to a tensor of cs"
+            )
+            assert self.init_train_c.shape[0] == len(self.init_train_x), (
+                f"load_train_data() must initialize exactly the same number of cs and xs, instead got {len(self.init_train_x)} xs and {self.init_train_c.shape[0]} cs"
+            )
+        assert torch.is_tensor(self.init_train_y), (
+            "load_train_data() must set self.init_train_y to a tensor of ys"
+        )
+        assert torch.is_tensor(self.init_train_z), (
+            "load_train_data() must set self.init_train_z to a tensor of zs"
+        )
+        assert self.init_train_y.shape[0] == len(self.init_train_x), (
+            f"load_train_data() must initialize exactly the same number of ys and xs, instead got {self.init_train_y.shape[0]} ys and {len(self.init_train_x)} xs"
+        )
+        assert self.init_train_z.shape[0] == len(self.init_train_x), (
+            f"load_train_data() must initialize exactly the same number of zs and xs, instead got {self.init_train_z.shape[0]} zs and {len(self.init_train_x)} xs"
+        )
 
         # initialize lolbo state
         self.lolbo_state = LOLBOState(
@@ -174,7 +187,11 @@ class Optimize:
 
     def create_wandb_tracker(self):
         if self.track_with_wandb:
-            config_dict = {k: v for method_dict in self.method_args.values() for k, v in method_dict.items()}
+            config_dict = {
+                k: v
+                for method_dict in self.method_args.values()
+                for k, v in method_dict.items()
+            }
             self.tracker = wandb.init(
                 project=self.wandb_project_name,
                 entity=self.wandb_entity,
@@ -205,13 +222,17 @@ class Optimize:
         """Main optimization loop"""
         # creates wandb tracker iff self.track_with_wandb == True
         self.create_wandb_tracker()
-        last_logged_n_calls = 0  # log table + save vae ckpt every log_table_freq oracle calls
+        last_logged_n_calls = (
+            0  # log table + save vae ckpt every log_table_freq oracle calls
+        )
         # main optimization loop
         while self.lolbo_state.objective.num_calls < self.max_n_oracle_calls:
             self.log_data_to_wandb_on_each_loop()
             # update models end to end when we fail to make
             #   progress e2e_freq times in a row (e2e_freq=10 by default)
-            if (self.lolbo_state.progress_fails_since_last_e2e >= self.e2e_freq) and self.update_e2e:
+            if (
+                self.lolbo_state.progress_fails_since_last_e2e >= self.e2e_freq
+            ) and self.update_e2e:
                 if not self.recenter_only:
                     self.lolbo_state.update_models_e2e()
                 self.lolbo_state.recenter()
@@ -229,7 +250,9 @@ class Optimize:
                     print("\nNew best found:")
                     self.print_progress_update()
                 self.lolbo_state.new_best_found = False
-            if (self.lolbo_state.objective.num_calls - last_logged_n_calls) >= self.log_table_freq:
+            if (
+                self.lolbo_state.objective.num_calls - last_logged_n_calls
+            ) >= self.log_table_freq:
                 self.final_save = False
                 self.log_topk_table_wandb()
                 last_logged_n_calls = self.lolbo_state.objective.num_calls
@@ -256,8 +279,12 @@ class Optimize:
         if self.track_with_wandb:
             print(f"Optimization Run: {self.wandb_project_name}, {wandb.run.name}")
         print(f"Best X Found: {self.lolbo_state.best_x_seen}")
-        print(f"Best {self.objective.task_id} Score: {self.lolbo_state.best_score_seen}")
-        print(f"Total Number of Oracle Calls (Function Evaluations): {self.lolbo_state.objective.num_calls}")
+        print(
+            f"Best {self.objective.task_id} Score: {self.lolbo_state.best_score_seen}"
+        )
+        print(
+            f"Total Number of Oracle Calls (Function Evaluations): {self.lolbo_state.objective.num_calls}"
+        )
 
         return self
 
@@ -317,7 +344,13 @@ class Optimize:
         save_dir = "optimization_all_collected_data/"
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
-        file_path = save_dir + self.wandb_project_name + "_" + wandb.run.name + "_all-data-collected.csv"
+        file_path = (
+            save_dir
+            + self.wandb_project_name
+            + "_"
+            + wandb.run.name
+            + "_all-data-collected.csv"
+        )
         df = {}
         df["train_x"] = np.array(self.lolbo_state.train_x)
         df["train_y"] = self.lolbo_state.train_y.squeeze().detach().cpu().numpy()

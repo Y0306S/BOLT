@@ -1,6 +1,7 @@
 import random
 import os
 import sys
+
 file_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(file_dir)
 sys.path.append(f"{parent_dir}")
@@ -13,11 +14,30 @@ from uniref_vae.load_vae import load_vae
 from your_tasks.your_blackbox_constraints import CONSTRAINT_FUNCTIONS_DICT
 from your_tasks.your_objective_functions import OBJECTIVE_FUNCTIONS_DICT
 
-ALL_AMINO_ACIDS = ["A", "C", "D", "E", "F", "G", "H", "I", "K", "L", "M", "N", "P", "Q", "R", "S", "T", "V", "W", "Y"]
+ALL_AMINO_ACIDS = [
+    "A",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "I",
+    "K",
+    "L",
+    "M",
+    "N",
+    "P",
+    "Q",
+    "R",
+    "S",
+    "T",
+    "V",
+    "W",
+    "Y",
+]
 
-PATH_TO_VAE_STATE_DICT = (
-    "../uniref_vae/saved_models/dim128_k1_kl0001_eff256_dff256_pious-sea-2_model_state_epoch_118.pkl"
-)
+PATH_TO_VAE_STATE_DICT = "../uniref_vae/saved_models/dim128_k1_kl0001_eff256_dff256_pious-sea-2_model_state_epoch_118.pkl"
 
 
 class ApexConstrainedDiverseObjective(LatentSpaceObjective):
@@ -49,12 +69,18 @@ class ApexConstrainedDiverseObjective(LatentSpaceObjective):
             xs_to_scores_dict = {}
         if task_specific_args is None:
             task_specific_args = []
-        self.path_to_vae_statedict = path_to_vae_statedict  # path to trained vae stat dict
+        self.path_to_vae_statedict = (
+            path_to_vae_statedict  # path to trained vae stat dict
+        )
         self.task_specific_args = task_specific_args
-        self.max_string_length = max_string_length  # max string length that VAE can generate
+        self.max_string_length = (
+            max_string_length  # max string length that VAE can generate
+        )
         self.divf_id = divf_id  # specify which diversity function to use with string id
         assert task_id in OBJECTIVE_FUNCTIONS_DICT
-        self.objective_function = OBJECTIVE_FUNCTIONS_DICT[task_id](*self.task_specific_args)
+        self.objective_function = OBJECTIVE_FUNCTIONS_DICT[task_id](
+            *self.task_specific_args
+        )
         self.template_id = template_id
         self.similarity = similarity
 

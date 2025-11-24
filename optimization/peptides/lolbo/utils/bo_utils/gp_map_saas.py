@@ -18,7 +18,9 @@ class MAPSaasGPModel(ApproximateGP):
         likelihood,
         num_taus=4,
     ):
-        variational_distribution = CholeskyVariationalDistribution(inducing_points.size(0))
+        variational_distribution = CholeskyVariationalDistribution(
+            inducing_points.size(0)
+        )
         variational_strategy = VariationalStrategy(
             self,
             inducing_points,
@@ -27,7 +29,9 @@ class MAPSaasGPModel(ApproximateGP):
         )
         super().__init__(variational_strategy)
         self.mean_module = gpytorch.means.ConstantMean()
-        aug_batch_shape = inducing_points.shape[:-2]  # to account for multiple batch dims
+        aug_batch_shape = inducing_points.shape[
+            :-2
+        ]  # to account for multiple batch dims
 
         self.covar_module = get_additive_map_saas_covar_module(
             ard_num_dims=inducing_points.shape[-1],
@@ -52,7 +56,9 @@ class MAPSaasGPModel(ApproximateGP):
 
     @torch.no_grad()
     def get_lengthscales(self):
-        return torch.vstack([k.base_kernel.lengthscale for k in self.covar_module.kernels])
+        return torch.vstack(
+            [k.base_kernel.lengthscale for k in self.covar_module.kernels]
+        )
 
 
 class LogTransformedInterval(Interval):
@@ -77,7 +83,9 @@ class LogTransformedInterval(Interval):
         # Save the untransformed initial value
         self.register_buffer(
             "initial_value_untransformed",
-            torch.tensor(initial_value).to(self.lower_bound) if initial_value is not None else None,
+            torch.tensor(initial_value).to(self.lower_bound)
+            if initial_value is not None
+            else None,
         )
 
     def transform(self, tensor):
@@ -102,7 +110,11 @@ class SaasPriorHelper:
         self._tau = torch.as_tensor(tau) if tau is not None else None
 
     def tau(self, m):
-        return self._tau.to(m.lengthscale) if self._tau is not None else m.raw_tau_constraint.transform(m.raw_tau)
+        return (
+            self._tau.to(m.lengthscale)
+            if self._tau is not None
+            else m.raw_tau_constraint.transform(m.raw_tau)
+        )
 
     def inv_lengthscale_prior_param_or_closure(self, m):
         return self.tau(m).unsqueeze(-1) / (m.lengthscale**2)
@@ -118,10 +130,14 @@ class SaasPriorHelper:
     def tau_prior_setting_closure(self, m, value):
         lb = m.raw_tau_constraint.lower_bound
         ub = m.raw_tau_constraint.upper_bound
-        m.raw_tau.data.fill_(m.raw_tau_constraint.inverse_transform(value.clamp(lb, ub)).item())
+        m.raw_tau.data.fill_(
+            m.raw_tau_constraint.inverse_transform(value.clamp(lb, ub)).item()
+        )
 
 
-def add_saas_prior(base_kernel: Kernel, tau: float | None = None, log_scale: bool = True, **tkwargs) -> Kernel:
+def add_saas_prior(
+    base_kernel: Kernel, tau: float | None = None, log_scale: bool = True, **tkwargs
+) -> Kernel:
     """Add a SAAS prior to a given base_kernel.
 
     The SAAS prior is given by tau / lengthscale^2 ~ HC(1.0). If tau is None,
@@ -186,7 +202,9 @@ def add_saas_prior(base_kernel: Kernel, tau: float | None = None, log_scale: boo
     return base_kernel
 
 
-def get_additive_map_saas_covar_module(ard_num_dims: int, num_taus: int = 4, batch_shape: torch.Size | None = None):
+def get_additive_map_saas_covar_module(
+    ard_num_dims: int, num_taus: int = 4, batch_shape: torch.Size | None = None
+):
     """Return an additive map SAAS covar module.
 
     The constructed kernel is an additive kernel with `num_taus` terms. Each term is a
@@ -206,7 +224,9 @@ def get_additive_map_saas_covar_module(ard_num_dims: int, num_taus: int = 4, bat
     taus = [1, 0.1, 0.01, 0.001]
     # for _ in range(num_taus):
     for tau in taus:
-        base_kernel = MaternKernel(nu=2.5, ard_num_dims=ard_num_dims, batch_shape=batch_shape)
+        base_kernel = MaternKernel(
+            nu=2.5, ard_num_dims=ard_num_dims, batch_shape=batch_shape
+        )
         add_saas_prior(base_kernel=base_kernel, tau=tau)
         scaled_kernel = ScaleKernel(
             base_kernel=base_kernel,
