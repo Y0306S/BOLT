@@ -1,4 +1,4 @@
-# BOLT-anonymous-release
+# BOLT-release
 
 ## Repository Structure
 
